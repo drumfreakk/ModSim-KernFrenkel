@@ -11,6 +11,7 @@ out: $(filename).o
 $(filename).o: $(filename).c
 	mkdir -p build
 	mkdir -p out
+	mkdir -p viscol
 	gcc -Wall -g3 -O$(level) -lm -I../inc/ -c $(filename).c -o ./build/$(filename).o
 
 dev: clean debug_compile
