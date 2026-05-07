@@ -68,3 +68,6 @@ dkms.conf
 *.bak.*
 
 !fcc/*
+
+*.ptc
+*.patch
