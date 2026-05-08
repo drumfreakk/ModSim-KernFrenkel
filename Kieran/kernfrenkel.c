@@ -8,7 +8,7 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-#define NDIM 3   // The actual number of dimensions used in the simulation
+#define NDIM 2   // The actual number of dimensions used in the simulation
 #define MAXDIM 3 // Maximum number of dimensions, to make the output files work nicely
 #define N 2000
 
@@ -18,8 +18,9 @@ const int    output_steps  = 100;
 const int    eq_steps      = 2000; // Equilibration steps
 const double density       = 0.6;
 double       delta_r       = 0.1; // Initial step size
+double       delta_a       = 0.1; // Initial angle change size // TODO dynamically update this
 const double beta          = 0.5;
-const char*  init_filename = "../fcc/864.dat";
+const char*  init_filename = "../fcc/864_2d.dat";
 // Fix the diameter at 1
 
 // Kern Frenkel Patchy particle model parameters
@@ -126,8 +127,63 @@ int move_particle(void){
     return 0;
 }
 
+void multiply_matrix(double res[MAXDIM][MAXDIM], double a[MAXDIM][MAXDIM], double b[MAXDIM][MAXDIM]){
+	int i,j,k;
+
+	for (i = 0; i < MAXDIM; i++){
+		for (j = 0; j < MAXDIM; j++){
+			res[i][j] = 0.0;
+			for (k = 0; k < MAXDIM; k++) res[i][j] += a[i][k] * b[k][j];
+		}
+	}
+}
+
 int rotate_particle(void){
-	//TODO rotate particles
+    int rpid = n_particles * dsfmt_genrand();
+
+    double dE = -particle_energy(rpid);
+//double rot[N][MAXDIM][MAXDIM];
+
+    double old_rot[MAXDIM][MAXDIM];
+    int i,j,n;
+	for (i = 0; i < NDIM; i++){
+		for (j = 0; j < NDIM; j++) old_rot[i][j] = rot[rpid][i][j];
+	}
+	
+	double res[MAXDIM][MAXDIM];
+	double R[MAXDIM][MAXDIM];
+	double angle;	
+#if NDIM==3
+//TODO
+#elif NDIM==2
+	angle = delta_a * (2.0 * dsfmt_genrand() - 1.0);
+
+	R[0][0] = cos(angle);
+	R[1][1] = R[0][0];
+	R[1][0] = sin(angle);
+	R[0][1] = -R[1][0];
+
+	R[0][2] = 0.0;
+	R[1][2] = 0.0;
+	R[2][2] = 1.0;
+	R[2][1] = 0.0;
+	R[2][0] = 0.0;
+
+	multiply_matrix(res, rot[rpid], R);
+#endif
+	for (i = 0; i < NDIM; i++){
+		for (j = 0; j < NDIM; j++) rot[rpid][i][j] = res[i][j];
+	}
+
+    dE += particle_energy(rpid);
+    if(dE < 0.0 || dsfmt_genrand() < exp(-beta * dE)){
+        energy += dE;
+        return 1;
+    }
+
+    for(i = 0; i < NDIM; i++){
+		for (j = 0; j < NDIM; j++) rot[rpid][i][j] = old_rot[i][j];
+	}
 
 	return 0;
 }
