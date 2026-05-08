@@ -20,7 +20,9 @@ double       delta_r       = 0.1; // Initial step size
 double       delta_a       = 0.1; // Initial angle change size 
 const double beta          = 0.5;
 const char*  init_filename = "../fcc/864.dat";
-// Fix the diameter at 1
+// Fix the diameter at 1.0, add a variable to control that
+const double sigma = 1.0;
+const double epsilon = 1.0;
 
 // Kern Frenkel Patchy particle model parameters
 const double patchdistance = 1.2; // Lambda, multiple of the diameter to which the path extends
@@ -83,9 +85,42 @@ double particle_energy(int pid){
     double particle_energy = 0.0;
     int n, d;
 	double dist2, min_d, temp;
+	// if in lambda, determine orientation, otherwise infinity or 0
     for(n = 0; n < n_particles; ++n){
         if(n == pid) continue;
+		double r_ij[NDIM]; // replaced min_d with r_ij so we can store the distances for later
+		dist2 = 0.0;
+		for(d = 0; d < NDIM; ++d){
+			r_ij[d] = r[pid][d] - r[n][d];
+			r_ij[d] -= (int)(2.0 * r_ij[d] / box[d]) * box[d];
+			dist2 += r_ij[d] * r_ij[d]; // dist2 is the r_ij vector dot r_ij, so square diagonal distance
+		}
+		double dist = sqrt(dist2);
+		if (dist < sigma) return 1e20; // I wanted to put INFINITY here, but thats not safe so I'm putting a very large number which might be a problem later
+		if (dist > patchdistance) continue; // 0 energy for non interacting particles
 
+		double r_hat[NDIM]; // unit vector pointing from n to pid
+		double dot_product[2] = 0.0; // 0 for pid, 1 for nth particle
+		for(d = 0; d< NDIM; ++d){
+			r_hat[d] = r_ij[d]/dist;
+			dot_product[0] += rot[pid][0][d] * r_hat[d];
+			dot_product[1] += rot[n][0][d] * (-r_hat[d]); // r_hat points from n to pid, so -r_hat points from pid to n
+
+		}
+		if (dot_product[0] > coshalfangle && dot_product[1] > coshalfangle) {
+		particle_energy -= epsilon; // attractive 
+		}
+		// I believe that this is correct, but below is my first intuition which I think is wrong but I'm leaving it here for now
+
+		// if(dist2 <= patchdistance * patchdistance){
+		// 	// check alignment of patches w dot product
+		// 	double dot_product = 0.0;
+		// 	for (int i = 0; i < MAXDIM; i++){
+		// 		for (int j = 0; j < MAXDIM; j++) dot_product += rot[pid][i][j] * rot[n][i][j];
+		// 	}
+		// 	if (dot_product > coshalfangle) particle_energy -= 1.0; // attractive
+		// }
+// This is how far I've come
 //TODO Properly calculate the energy
 //        dist2 = 0.0;
 //        for(d = 0; d < NDIM; ++d){
@@ -99,7 +134,6 @@ double particle_energy(int pid){
 //            particle_energy += 4.0 * temp * (temp - 1.0) - e_cut;
 //        }
     }
-
     return particle_energy;
 }
 
