@@ -55,7 +55,6 @@ void   init_rotations(void);
 FILE*  nice_fopen(const char* path, const char* mode);
 
 int main(int argc, char* argv[]){
-
 	assert(delta_r > 0.0);
     assert(delta_a > 0.0);
 
@@ -96,12 +95,18 @@ double particle_energy(int pid){
 			dist2 += r_ij[d] * r_ij[d]; // dist2 is the r_ij vector dot r_ij, so square diagonal distance
 		}
 		double dist = sqrt(dist2);
-		if (dist < sigma) return 1e20; // I wanted to put INFINITY here, but thats not safe so I'm putting a very large number which might be a problem later
-		if (dist > patchdistance) continue; // 0 energy for non interacting particles
+		if (dist < sigma){
+			// This should never occur with the new check in move_particle, but just to be safe.
+			printf("ERROR: PARTICLE OVERLAP\n");
+			return 0; 
+		}
+		if (dist > sigma * patchdistance) continue; // 0 energy for non interacting particles
 
 		double r_hat[NDIM]; // unit vector pointing from n to pid
-		double dot_product[2] = 0.0; // 0 for pid, 1 for nth particle
-		for(d = 0; d< NDIM; ++d){
+		double dot_product[2]; // 0 for pid, 1 for nth particle
+		dot_product[0] = 0.0;
+		dot_product[1] = 0.0;
+		for(d = 0; d < NDIM; ++d){
 			r_hat[d] = r_ij[d]/dist;
 			dot_product[0] += rot[pid][0][d] * r_hat[d];
 			dot_product[1] += rot[n][0][d] * (-r_hat[d]); // r_hat points from n to pid, so -r_hat points from pid to n
@@ -110,6 +115,7 @@ double particle_energy(int pid){
 		if (dot_product[0] > coshalfangle && dot_product[1] > coshalfangle) {
 		particle_energy -= epsilon; // attractive 
 		}
+
 		// I believe that this is correct, but below is my first intuition which I think is wrong but I'm leaving it here for now
 
 		// if(dist2 <= patchdistance * patchdistance){
@@ -143,12 +149,32 @@ int move_particle(void){
     double dE = -particle_energy(rpid);
 
     double old_pos[NDIM];
-    int d;
-    for(d = 0; d < NDIM; ++d){
+    int n,d;
+    for(d = 0; d < NDIM; d++){
         old_pos[d] = r[rpid][d];
         r[rpid][d] += delta_r * (2.0 * dsfmt_genrand() - 1.0) + box[d];
         r[rpid][d] -= (int)(r[rpid][d] / box[d]) * box[d];
     }
+
+	// Check for particle overlap, and reject the move if particles overlap.
+	double abs_distance_squared, axis_distance;
+	for (n = 0; n < n_particles; n++){
+		if (n == rpid) continue; // Don't compare to the original position of the particle
+
+		abs_distance_squared = 0.0;
+
+		for (d = 0; d < NDIM; d++){
+			axis_distance = r[rpid][d] - r[n][d];
+			axis_distance -= box[d] * round(axis_distance / box[d]);
+
+			abs_distance_squared += axis_distance * axis_distance;
+		}
+
+		if (abs_distance_squared < sigma * sigma){
+    		for(d = 0; d < NDIM; d++) r[rpid][d] = old_pos[d];
+			return 0;
+		}
+	}
 
     dE += particle_energy(rpid);
     if(dE < 0.0 || dsfmt_genrand() < exp(-beta * dE)){
@@ -156,7 +182,7 @@ int move_particle(void){
         return 1;
     }
 
-    for(d = 0; d < NDIM; ++d) r[rpid][d] = old_pos[d];
+    for(d = 0; d < NDIM; d++) r[rpid][d] = old_pos[d];
 
     return 0;
 }

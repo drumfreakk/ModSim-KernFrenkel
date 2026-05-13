@@ -18,12 +18,15 @@ dev: clean debug_compile
 
 prod: clean build_compile
 
+time: time_compile
+
 debug_compile: run
 
 build_compile: level := 3
 build_compile: run
 
+time_compile: filename := timing
+time_compile: build_compile
+
 clean:
 	rm -f build/*
-
-
