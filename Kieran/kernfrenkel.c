@@ -12,20 +12,22 @@
 #define MAXDIM 3 // Maximum number of dimensions, to make the output files work nicely
 #define N 2000
 
+#define NPATCHES 3 
+
 /* Initialization variables */
 const int    mc_steps      = 10000;
 const int    output_steps  = 100;
 const double density       = 0.6;
 double       delta_r       = 0.1; // Initial step size
 double       delta_a       = 0.1; // Initial angle change size 
-const double beta          = 0.5;
-const char*  init_filename = "../fcc/864.dat";
+const double beta          = 5;
+const char*  init_filename = "../fcc/256.dat";
 // Fix the diameter at 1.0, add a variable to control that
 const double sigma = 1.0;
 const double epsilon = 1.0;
 
 // Kern Frenkel Patchy particle model parameters
-const double patchdistance = 1.2; // Lambda, multiple of the diameter to which the path extends
+const double patchdistance = 1.5; // Lambda, multiple of the diameter to which the path extends
 const double coshalfangle = 0.9; // ~cos(pi/8) as a first try, some nice value for now
 
 
@@ -44,6 +46,9 @@ void   run_simulation(void);
 double particle_energy(int pid);
 int    move_particle(void);
 int    rotate_particle(void);
+
+void   matrix_vector_product(double res[MAXDIM], double matrix[MAXDIM][MAXDIM], double vector[MAXDIM]);
+double dot_product(double a[MAXDIM], double b[MAXDIM]);
 
 void   set_rotation_matrix_from_director(int pid, double d[4]);
 
@@ -80,11 +85,33 @@ void init_rotations(void) {
 
 }
 
+void matrix_vector_product(double res[MAXDIM], double matrix[MAXDIM][MAXDIM], double vector[MAXDIM]){
+	int i,k;
+
+	for (i = 0; i < MAXDIM; i++){
+		res[i] = 0.0;
+		for (k = 0; k < MAXDIM; k++) res[i] += matrix[i][k] * vector[k];
+	}
+}
+
+double dot_product(double a[MAXDIM], double b[MAXDIM]){
+	double product = 0.0;
+
+	for (int d = 0; d < MAXDIM; d++) product += a[d] * b[d];
+
+	return product;
+}
+
 double particle_energy(int pid){
     double particle_energy = 0.0;
-    int n, d;
-	double dist2, min_d, temp;
+    int n, d, i, j;
+	double dist2;
 	// if in lambda, determine orientation, otherwise infinity or 0
+
+	double original_patch_directions[NPATCHES][NDIM] = {{1.0,0.0,0.0},
+												 {-0.5,0.0,sin(2.0*M_PI/3.0)},
+											  	 {-0.5,0.0,-sin(2.0*M_PI/3.0)}};
+
     for(n = 0; n < n_particles; ++n){
         if(n == pid) continue;
 		double r_ij[NDIM]; // replaced min_d with r_ij so we can store the distances for later
@@ -102,18 +129,28 @@ double particle_energy(int pid){
 		}
 		if (dist > sigma * patchdistance) continue; // 0 energy for non interacting particles
 
+		// Get the patch directors properly rotated
+		double patch_directions[2][NPATCHES][MAXDIM] = {{{0.0},{0.0},{0.0}},{{0.0},{0.0},{0.0}}}; // Should all initialise to 0
+		for (i = 0; i < NPATCHES; i++) matrix_vector_product(patch_directions[0][i], rot[pid], original_patch_directions[i]);
+		for (i = 0; i < NPATCHES; i++) matrix_vector_product(patch_directions[1][i], rot[n],   original_patch_directions[i]);
+		
 		double r_hat[NDIM]; // unit vector pointing from n to pid
-		double dot_product[2]; // 0 for pid, 1 for nth particle
-		dot_product[0] = 0.0;
-		dot_product[1] = 0.0;
+		double dot_products[2] = {0.0,0.0}; // 0 for pid, 1 for nth particle
 		for(d = 0; d < NDIM; ++d){
 			r_hat[d] = r_ij[d]/dist;
-			dot_product[0] += rot[pid][0][d] * r_hat[d];
-			dot_product[1] += rot[n][0][d] * (-r_hat[d]); // r_hat points from n to pid, so -r_hat points from pid to n
-
+	//		dot_product[0] += rot[pid][0][d] * r_hat[d];
+	//		dot_product[1] += rot[n][0][d] * (-r_hat[d]); // r_hat points from n to pid, so -r_hat points from pid to n
 		}
-		if (dot_product[0] > coshalfangle && dot_product[1] > coshalfangle) {
-		particle_energy -= epsilon; // attractive 
+		// Iterate over all patch combinations
+		for (i = 0; i < NPATCHES; i++){
+			for (j = 0; j < NPATCHES; j++){
+
+				dot_products[0] = dot_product(patch_directions[0][i], r_hat);
+				dot_products[1] = -dot_product(patch_directions[1][j], r_hat);
+				if (dot_products[0] > coshalfangle && dot_products[1] > coshalfangle) {
+					particle_energy -= epsilon; // attractive 
+				}
+			}
 		}
 
 		// I believe that this is correct, but below is my first intuition which I think is wrong but I'm leaving it here for now
@@ -127,18 +164,6 @@ double particle_energy(int pid){
 		// 	if (dot_product > coshalfangle) particle_energy -= 1.0; // attractive
 		// }
 // This is how far I've come
-//TODO Properly calculate the energy
-//        dist2 = 0.0;
-//        for(d = 0; d < NDIM; ++d){
-//            min_d = r[pid][d] - r[n][d];
-//            min_d -= (int)(2.0 * min_d / box[d]) * box[d];
-//            dist2 += min_d * min_d;
-//        }
-//
-//        if(dist2 <= r_cut * r_cut){
-//            temp = 1.0 / (dist2 * dist2 * dist2);
-//            particle_energy += 4.0 * temp * (temp - 1.0) - e_cut;
-//        }
     }
     return particle_energy;
 }
@@ -307,6 +332,8 @@ void run_simulation(){
             write_data(step);
         }
     }
+
+	printf("Done simulating!\007\nFinal energy: %lf\n", energy);
 }
 
 void read_data(void){
@@ -358,7 +385,8 @@ void write_data(long int step){
 		// 3 patches -> 3 potential bonds
 		// Eventually, this can become the ids of the particle it is bonded to I think
 		// For now, -1 indicates no bond
-		fprintf(fd, "-1\t-1\t-1\n");
+		for (i = 0; i < NPATCHES-1; i++) fprintf(fd, "-1\t");
+		fprintf(fd,"-1\n");
 
     }
     fclose(fd);
