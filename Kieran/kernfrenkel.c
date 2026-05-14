@@ -151,8 +151,9 @@ double particle_energy(int pid){
 		for (i = 0; i < NPATCHES; i++){
 			for (j = 0; j < NPATCHES; j++){
 
-				dot_products[0] = dot_product(patch_directions[0][i], r_hat);
-				dot_products[1] = -dot_product(patch_directions[1][j], r_hat);
+				// r_hat is pointing from n to pid, so opposite signs are needed, my mistake
+				dot_products[0] = -dot_product(patch_directions[0][i], r_hat);
+				dot_products[1] = dot_product(patch_directions[1][j], r_hat);
 				if (dot_products[0] > coshalfangle && dot_products[1] > coshalfangle) {
 					particle_energy -= epsilon; // attractive
 				}
