@@ -17,11 +17,11 @@
 /* Initialization variables */
 const int    mc_steps      = 10000;
 const int    output_steps  = 100;
-const double density       = 0.6;
+const double density       = 0.8;
 double       delta_r       = 0.1; // Initial step size
 double       delta_a       = 0.1; // Initial angle change size 
-const double beta          = 5;
-const char*  init_filename = "../fcc/256.dat";
+const double beta          = 50;
+const char*  init_filename = "../fcc/32.dat";
 // Fix the diameter at 1.0, add a variable to control that
 const double sigma = 1.0;
 const double epsilon = 1.0;
@@ -35,6 +35,9 @@ const double coshalfangle = 0.9; // ~cos(pi/8) as a first try, some nice value f
 int n_particles = 0;
 double r[N][MAXDIM];           // Positions of the particles
 double directors[N][4];        // Quaternion rotations of the particles. The source of truth for orientation
+// Note that the quaternion is stored as:
+// q[0] * i + q[1] * j + q[2] * k + q[3]
+
 double rot[N][MAXDIM][MAXDIM]; // Rotation matrices of the particles. Stored since they are used a lot
 double box[MAXDIM];
 
@@ -47,10 +50,11 @@ double particle_energy(int pid);
 int    move_particle(void);
 int    rotate_particle(void);
 
-void   matrix_vector_product(double res[MAXDIM], double matrix[MAXDIM][MAXDIM], double vector[MAXDIM]);
-double dot_product(double a[MAXDIM], double b[MAXDIM]);
+void   matrix_vector_product(double res[MAXDIM], const double matrix[MAXDIM][MAXDIM], const double vector[MAXDIM]);
+double dot_product(const double a[MAXDIM], const double b[MAXDIM]);
 
-void   set_rotation_matrix_from_director(int pid, double d[4]);
+void   generate_random_unit_quaternion(double rv[4]);
+void   set_rotation_matrix_from_director(int pid, const double d[4]);
 
 void   read_data(void);
 void   write_data(long int step);
@@ -59,13 +63,15 @@ void   init_rotations(void);
 
 FILE*  nice_fopen(const char* path, const char* mode);
 
-int main(int argc, char* argv[]){
-	assert(delta_r > 0.0);
-    assert(delta_a > 0.0);
+//TODO: generate bonds
 
+int main(int argc, char* argv[]){
 	size_t seed = time(NULL);
     dsfmt_seed(seed);
 	printf("Seed: %lu\n", seed);
+
+	assert(delta_r > 0.0);
+    assert(delta_a > 0.0);
 
 	run_simulation();
 
@@ -85,7 +91,7 @@ void init_rotations(void) {
 
 }
 
-void matrix_vector_product(double res[MAXDIM], double matrix[MAXDIM][MAXDIM], double vector[MAXDIM]){
+void matrix_vector_product(double res[MAXDIM], const double matrix[MAXDIM][MAXDIM], const double vector[MAXDIM]){
 	int i,k;
 
 	for (i = 0; i < MAXDIM; i++){
@@ -94,7 +100,7 @@ void matrix_vector_product(double res[MAXDIM], double matrix[MAXDIM][MAXDIM], do
 	}
 }
 
-double dot_product(double a[MAXDIM], double b[MAXDIM]){
+double dot_product(const double a[MAXDIM], const double b[MAXDIM]){
 	double product = 0.0;
 
 	for (int d = 0; d < MAXDIM; d++) product += a[d] * b[d];
@@ -108,7 +114,7 @@ double particle_energy(int pid){
 	double dist2;
 	// if in lambda, determine orientation, otherwise infinity or 0
 
-	double original_patch_directions[NPATCHES][NDIM] = {{1.0,0.0,0.0},
+	const double original_patch_directions[NPATCHES][NDIM] = {{1.0,0.0,0.0},
 												 {-0.5,0.0,sin(2.0*M_PI/3.0)},
 											  	 {-0.5,0.0,-sin(2.0*M_PI/3.0)}};
 
@@ -130,7 +136,7 @@ double particle_energy(int pid){
 		if (dist > sigma * patchdistance) continue; // 0 energy for non interacting particles
 
 		// Get the patch directors properly rotated
-		double patch_directions[2][NPATCHES][MAXDIM] = {{{0.0},{0.0},{0.0}},{{0.0},{0.0},{0.0}}}; // Should all initialise to 0
+		double patch_directions[2][NPATCHES][MAXDIM];
 		for (i = 0; i < NPATCHES; i++) matrix_vector_product(patch_directions[0][i], rot[pid], original_patch_directions[i]);
 		for (i = 0; i < NPATCHES; i++) matrix_vector_product(patch_directions[1][i], rot[n],   original_patch_directions[i]);
 		
@@ -148,7 +154,7 @@ double particle_energy(int pid){
 				dot_products[0] = dot_product(patch_directions[0][i], r_hat);
 				dot_products[1] = -dot_product(patch_directions[1][j], r_hat);
 				if (dot_products[0] > coshalfangle && dot_products[1] > coshalfangle) {
-					particle_energy -= epsilon; // attractive 
+					particle_energy -= epsilon; // attractive
 				}
 			}
 		}
@@ -212,6 +218,39 @@ int move_particle(void){
     return 0;
 }
 
+void generate_random_unit_quaternion(double rv[4]){
+// Generate a random unit quaternion, according to the method from Marsaglia, 1972
+	int n;
+	double S[2];  // Lengths
+	for (n = 0; n < 2; n++){
+		do{
+			rv[2*n] = 2.0*dsfmt_genrand() - 1.0;
+			rv[2*n+1] = 2.0*dsfmt_genrand() - 1.0;
+			S[n] = rv[2*n]*rv[2*n] + rv[2*n+1]*rv[2*n+1];
+		} while (S[n] >= 1);
+	}
+//	assert(S[0] < 1.0);
+//	assert(S[1] < 1.0);
+
+	rv[2] *= sqrt((1-S[0])/S[1]);
+	rv[3] *= sqrt((1-S[0])/S[1]);
+
+
+/** TESTING CODE STARTS HERE **/
+//	double length = 0.0;
+//	
+//	for (n = 0; n < 4; n++){
+//		printf("%lf\t", rv[n]);
+//		length += rv[n]*rv[n];
+//	}
+//	printf("\tL: %e\n", sqrt(length)-1.0);
+//
+//	// This assertion doesn't always pass,
+//	// Sometimes (due to rounding errors), the length is around 1 +/- 1e-16
+//	// Which I call close enough
+//	assert(rv[0]*rv[0] + rv[1]*rv[1] + rv[2]*rv[2] + rv[3]*rv[3] == 1.0);
+}
+
 int rotate_particle(void){
     int rpid = n_particles * dsfmt_genrand();
 
@@ -230,19 +269,7 @@ Get the rotation matrix associated with rv
 
 // Generate the unit quaternion
 	double rv[4]; // Random unit 4-vector
-	double S[2];  // Lengths
-	for (n = 0; n < 2; n++){
-		do{
-			rv[2*n] = 2.0*dsfmt_genrand() - 1.0;
-			rv[2*n+1] = 2.0*dsfmt_genrand() - 1.0;
-			S[n] = rv[2*n]*rv[2*n] + rv[2*n+1]*rv[2*n+1];
-		} while (S[n] >= 1);
-	}
-
-	rv[2] *= sqrt((1-S[0])/S[1]);
-	rv[2] *= sqrt((1-S[0])/S[1]);
-
-//	assert(rv[0]*rv[0] + rv[1]*rv[1] + rv[2]*rv[2] + rv[3]*rv[3] == 1.0);
+	generate_random_unit_quaternion(rv);
 
 	double length = 0.0;
 	for (n = 0; n < 4; n++){
@@ -267,17 +294,17 @@ Get the rotation matrix associated with rv
 }
 
 // Set the (globally stored) rotation matrix of particle pid according to the rotation quaternion d
-void set_rotation_matrix_from_director(int pid, double d[4]){
+void set_rotation_matrix_from_director(int pid, const double d[4]){
 	rot[pid][0][0] = d[0]*d[0] - d[1]*d[1] - d[2]*d[2] + d[3]*d[3];
 	rot[pid][0][1] = 2.0 * (d[0] * d[1] - d[2] * d[3]);
-	rot[pid][0][2] = 2.0 * (d[2] * d[0] - d[1] * d[3]);
+	rot[pid][0][2] = 2.0 * (d[2] * d[0] + d[1] * d[3]);
 
 	rot[pid][1][0] = 2.0 * (d[0] * d[1] + d[2] * d[3]);
 	rot[pid][1][1] = d[1]*d[1] - d[2]*d[2] - d[0]*d[0] + d[3]*d[3];
 	rot[pid][1][2] = 2.0 * (d[1] * d[2] - d[0] * d[3]);
 
-	rot[pid][2][0] = 2.0 * (d[2] * d[0] - d[2] * d[3]);
-	rot[pid][2][1] = 2.0 * (d[1] * d[2] - d[0] * d[3]);
+	rot[pid][2][0] = 2.0 * (d[2] * d[0] - d[1] * d[3]);
+	rot[pid][2][1] = 2.0 * (d[1] * d[2] + d[0] * d[3]);
 	rot[pid][2][2] = d[2]*d[2] - d[0]*d[0] - d[1]*d[1] + d[3]*d[3];
 }
 
@@ -316,14 +343,17 @@ void run_simulation(){
         }
 
         if(step % output_steps == 0){
-//            printf("Step %d. Move acceptance: %f.\n",
-//                step, (double)accepted / (n_particles * output_steps)
+//            printf("Step %ld. Move acceptance: %lf\tRotation acceptance: %lf\n",
+//                step,
+//				(double)accepted_mov / total_mov,
+//				(double)accepted_rot / total_rot
 //            );
+//			printf("\tdelta_r: %lf\tdelta_a: %lf\n", delta_r, delta_a);
 			
 			if ((double)accepted_mov / total_mov < 0.45) delta_r *= 0.9;
-			if ((double)accepted_mov / total_mov > 0.65) delta_r /= 0.9;
+			if ((double)accepted_mov / total_mov > 0.55) delta_r /= 0.9;
 			if ((double)accepted_rot / total_rot < 0.45) delta_a *= 0.9;
-			if ((double)accepted_rot / total_rot > 0.65) delta_a /= 0.9;
+			if ((double)accepted_rot / total_rot > 0.55) delta_a /= 0.9;
             
     		accepted_mov = 0;
 			accepted_rot = 0;
@@ -332,6 +362,7 @@ void run_simulation(){
             write_data(step);
         }
     }
+    write_data(step);
 
 	printf("Done simulating!\007\nFinal energy: %lf\n", energy);
 }
