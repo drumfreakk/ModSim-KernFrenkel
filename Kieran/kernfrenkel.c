@@ -130,8 +130,9 @@ double particle_energy(int pid){
 		double dist = sqrt(dist2);
 		if (dist < sigma){
 			// This should never occur with the new check in move_particle, but just to be safe.
-			printf("ERROR: PARTICLE OVERLAP\n");
-			return 0; 
+			particle_energy = INFINITY; // set energy ot infinity if particles overlap
+			// printf("ERROR: PARTICLE OVERLAP\n");
+			return particle_energy; 
 		}
 		if (dist > sigma * patchdistance) continue; // 0 energy for non interacting particles
 
@@ -178,7 +179,7 @@ double particle_energy(int pid){
 int move_particle(void){
     int rpid = n_particles * dsfmt_genrand();
 
-    double dE = -particle_energy(rpid);
+    double dE = -particle_energy(rpid); // of course we also assume this is not overlapping
 
     double old_pos[NDIM];
     int n,d;
@@ -188,25 +189,27 @@ int move_particle(void){
         r[rpid][d] -= (int)(r[rpid][d] / box[d]) * box[d];
     }
 
-	// Check for particle overlap, and reject the move if particles overlap.
-	double abs_distance_squared, axis_distance;
-	for (n = 0; n < n_particles; n++){
-		if (n == rpid) continue; // Don't compare to the original position of the particle
+	// // Check for particle overlap, and reject the move if particles overlap.
+	// double abs_distance_squared, axis_distance;
+	// for (n = 0; n < n_particles; n++){
+	// 	if (n == rpid) continue; // Don't compare to the original position of the particle
 
-		abs_distance_squared = 0.0;
+	// 	abs_distance_squared = 0.0;
 
-		for (d = 0; d < NDIM; d++){
-			axis_distance = r[rpid][d] - r[n][d];
-			axis_distance -= box[d] * round(axis_distance / box[d]);
+	// 	for (d = 0; d < NDIM; d++){
+	// 		axis_distance = r[rpid][d] - r[n][d];
+	// 		axis_distance -= box[d] * round(axis_distance / box[d]);
 
-			abs_distance_squared += axis_distance * axis_distance;
-		}
+	// 		abs_distance_squared += axis_distance * axis_distance;
+	// 	}
 
-		if (abs_distance_squared < sigma * sigma){
-    		for(d = 0; d < NDIM; d++) r[rpid][d] = old_pos[d];
-			return 0;
-		}
-	}
+	// 	if (abs_distance_squared < sigma * sigma){
+    // 		for(d = 0; d < NDIM; d++) r[rpid][d] = old_pos[d];
+	// 		return 0;
+	// 	}
+	// }
+
+	if (particle_energy(rpid) == INFINITY) {return 0;} // autoreject overlapping moves
 
     dE += particle_energy(rpid);
     if(dE < 0.0 || dsfmt_genrand() < exp(-beta * dE)){
