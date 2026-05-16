@@ -43,6 +43,10 @@ double box[MAXDIM];
 
 double energy = 0.0;
 
+// bond book keeping, tracking the single bond per patch KF condition
+// Example particle_bonds[0][1][2] = 60 means that the second patch of particle 0 is bonded to the third patch of particle 60 
+int particle_bonds[N][NPATCHES][NPATCHES] = {{{-1}}}; // for each particle, stores -1 if patch unoccupied or the pid of the partner particle at the N_partner_patch location
+
 
 void   run_simulation(void);
 
@@ -157,6 +161,24 @@ double particle_energy(int pid){
 				dot_products[1] = dot_product(patch_directions[1][j], r_hat);
 				if (dot_products[0] > coshalfangle && dot_products[1] > coshalfangle) {
 					particle_energy -= epsilon; // attractive
+
+					// I must obey detailed balance when asigning particle pairs, 
+					// in the same way I must allow for the desctruction of the particle pairs.
+					// The formation and destruction (simpler) must be deterministic 
+
+					// One option is to: always assign the bond to the lowest numbered particle, 
+					// and remove the bond if either particle rotates such that the patches are no longer aligned, 
+					// or if the particles move too far apart.
+
+					// possibly then, I need to check ALL the moved particle bonds each time and assign energy based on bond number
+					// particle_energy = -epsilon * n_bonds
+					// thus new bonds - old bonds is deciding for dE
+
+					// TO DO
+					// 
+					// 1. Match bonds in a deterministic manner upon initialisation (maybe implement if init condition)
+					// 2. Upon each particled moved, destroy pid bonds and reform them deterministcally
+					// 3. Pass on the new energy based on new bonds
 				}
 			}
 		}
