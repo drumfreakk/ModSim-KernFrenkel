@@ -189,33 +189,15 @@ int move_particle(void){
         r[rpid][d] -= (int)(r[rpid][d] / box[d]) * box[d];
     }
 
-	// // Check for particle overlap, and reject the move if particles overlap.
-	// double abs_distance_squared, axis_distance;
-	// for (n = 0; n < n_particles; n++){
-	// 	if (n == rpid) continue; // Don't compare to the original position of the particle
-
-	// 	abs_distance_squared = 0.0;
-
-	// 	for (d = 0; d < NDIM; d++){
-	// 		axis_distance = r[rpid][d] - r[n][d];
-	// 		axis_distance -= box[d] * round(axis_distance / box[d]);
-
-	// 		abs_distance_squared += axis_distance * axis_distance;
-	// 	}
-
-	// 	if (abs_distance_squared < sigma * sigma){
-    // 		for(d = 0; d < NDIM; d++) r[rpid][d] = old_pos[d];
-	// 		return 0;
-	// 	}
-	// }
-
-	if (particle_energy(rpid) == INFINITY) {return 0;} // autoreject overlapping moves
-
-    dE += particle_energy(rpid);
-    if(dE < 0.0 || dsfmt_genrand() < exp(-beta * dE)){
-        energy += dE;
-        return 1;
-    }
+	double new_energy = particle_energy(rpid);
+	
+	if (new_energy != INFINITY) { // autoreject overlapping moves
+		dE += new_energy;
+    	if(dE < 0.0 || dsfmt_genrand() < exp(-beta * dE)){
+    	    energy += dE;
+    	    return 1;
+    	}
+	}
 
     for(d = 0; d < NDIM; d++) r[rpid][d] = old_pos[d];
 
