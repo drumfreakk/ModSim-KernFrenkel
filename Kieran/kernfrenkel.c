@@ -16,7 +16,7 @@
 #define NPATCHES 3 
 
 /* Initialization variables */
-const int    mc_steps      = 10000;
+const int    mc_steps      = 100000;
 const int    output_steps  = 100;
 const double density       = 0.8;
 double       delta_r       = 0.1; // Initial step size
@@ -50,6 +50,8 @@ int particle_bonds[N][NPATCHES][NPATCHES] = {{{-1}}}; // for each particle, stor
 
 // FD to output all particle data to
 FILE* output_fd = NULL;
+FILE* energy_fd = NULL;
+
 
 void   run_simulation(void);
 
@@ -64,13 +66,16 @@ void   generate_random_unit_quaternion(double rv[4]);
 void   set_rotation_matrix_from_director(int pid, const double d[4]);
 
 void   read_data(void);
-void   write_data(long int step);
+void   write_data(void);
 void   set_density(void);
 void   init_rotations(void);
 void   check_SBPP(void);
 
 FILE*  nice_fopen(const char* path, const char* mode);
 void   close_fds(int sig);
+
+void   print_vector(double vec[], int len);
+void   print_matrix(double mat[MAXDIM][MAXDIM]);
 
 //TODO: generate bonds
 
@@ -87,6 +92,78 @@ int main(int argc, char* argv[]){
 	size_t seed = time(NULL);
     dsfmt_seed(seed);
 	printf("Seed: %lu\n", seed);
+
+
+	int n;
+    read_data();
+	init_rotations();
+
+
+// Open the output file
+// This way, it outputs all snapshots into a single file, which lets CVT load them all in one go
+    char buffer[128];
+#if NDIM==2
+	char extension[6] = ".patch";
+#elif NDIM==3
+	char extension[6] = "__.ptc"; // Not the nicest way, but prevents segfaults
+#endif
+    sprintf(buffer, "out/coords_%.6s", extension);
+	output_fd = nice_fopen(buffer, "w");
+	if (output_fd == NULL) return 0;
+//[0.5, 0.866025, 0, 0] // 120 deg X
+//[0.707107, 0.707107, 0, 0] rotates 90deg x
+
+	n_particles = 2;
+
+	write_data();
+
+	directors[1][0] = 0.0;
+	directors[1][1] = 0.5;
+	directors[1][2] = 0.0;
+	directors[1][3] = 0.866025;
+	
+	set_rotation_matrix_from_director(1, directors[1]);
+	
+	r[1][2] = 1.0;
+
+	write_data();
+
+//    int rpid = 0;
+//
+//    double new_director[4];
+//	int n;
+//	double rv[4]; // Random unit 4-vector
+//	generate_random_unit_quaternion(rv);
+//
+//	double length = 0.0;
+//	for (n = 0; n < 4; n++){
+//		new_director[n] = rv[n] * delta_a + directors[rpid][n];
+//		length += new_director[n] * new_director[n];
+//	}
+//	length = sqrt(length);
+//	for (n = 0; n < 4; n++) new_director[n] /= length;
+//
+//	set_rotation_matrix_from_director(rpid, new_director);
+//
+//    dE += particle_energy(rpid);
+//    if(dE < 0.0 || dsfmt_genrand() < exp(-beta * dE)){
+//        energy += dE;
+//		for (n = 0; n < 4; n++) directors[rpid][n] = new_director[n];
+//        return 1;
+//    }
+//	
+//	set_rotation_matrix_from_director(rpid, directors[rpid]);
+//
+
+
+	double rechecked_energy = 0.0;
+    for(n = 0; n < n_particles; ++n) rechecked_energy += particle_energy(n);
+    rechecked_energy *= 0.5;
+	printf("Energy: %lf\n", rechecked_energy);
+
+	fclose(output_fd);
+	return 0;
+
 
 	assert(delta_r > 0.0);
     assert(delta_a > 0.0);
@@ -129,15 +206,35 @@ double dot_product(const double a[MAXDIM], const double b[MAXDIM]){
 	return product;
 }
 
+void print_vector(double vec[], int len){
+	printf("{");
+	for (int i = 0; i < len-1; i++) printf("% .2lf,\t", vec[i]);
+	printf("% .2lf}\n", vec[len-1]);
+}
+
+void print_matrix(double mat[MAXDIM][MAXDIM]){
+	printf("{");
+	int i,j;
+
+	for (i = 0; i < MAXDIM; i++){
+		if (i != 0) printf(" ");
+		printf("{");
+		for (j = 0; j < MAXDIM-1; j++) printf("% .2lf,\t", mat[i][j]);
+		printf("% .2lf}", mat[i][MAXDIM-1]);
+		if (i != MAXDIM-1) printf(",\n");
+	}
+	printf("}\n");
+}
+
 double particle_energy(int pid){
     double particle_energy = 0.0;
     int n, d, i, j;
 	double dist2;
 	// if in lambda, determine orientation, otherwise infinity or 0
 
-	const double original_patch_directions[NPATCHES][NDIM] = {{1.0,0.0,0.0},
-												 {-0.5,0.0,sin(2.0*M_PI/3.0)},
-											  	 {-0.5,0.0,-sin(2.0*M_PI/3.0)}};
+	const double original_patch_directions[NPATCHES][NDIM] = {{ 0.0,               0.0,  1.0},
+												              { sin(2.0*M_PI/3.0), 0.0, -0.5},
+											  	              {-sin(2.0*M_PI/3.0), 0.0, -0.5}};
 
 
     for(n = 0; n < n_particles; ++n){
@@ -157,29 +254,39 @@ double particle_energy(int pid){
 			return particle_energy; 
 		}
 		if (dist > sigma * patchdistance) continue; // 0 energy for non interacting particles
+	
+#ifdef DEBUG
+		printf("Within patch range for particles %i & %i\n", pid, n);
+#endif		
 
 		// Get the patch directors properly rotated
 		double patch_directions[2][NPATCHES][MAXDIM];
 		for (i = 0; i < NPATCHES; i++) matrix_vector_product(patch_directions[0][i], rot[pid], original_patch_directions[i]);
 		for (i = 0; i < NPATCHES; i++) matrix_vector_product(patch_directions[1][i], rot[n],   original_patch_directions[i]);
-		
+	
+#ifdef DEBUG
+		print_matrix(rot[pid]);
+		print_vector(patch_directions[0][0], 3);
+		print_vector(patch_directions[0][1], 3);
+		print_vector(patch_directions[0][2], 3);
+#endif
+
 		double r_hat[NDIM]; // unit vector pointing from n to pid
 		double dot_products[2] = {0.0,0.0}; // 0 for pid, 1 for nth particle
 		for(d = 0; d < NDIM; ++d) r_hat[d] = r_ij[d]/dist;
 
-		int bonded = 0; // each particle pair can only have one bond, once this is satisfied we go to next particle
+		bool bonded = false; // each particle pair can only have one bond, once this is satisfied we go to next particle
 		// Iterate over all patch combinations
 		for (i = 0; i < NPATCHES && !bonded; i++){
 			dot_products[0] = -dot_product(patch_directions[0][i], r_hat);
-			
-			for (j = 0; j < NPATCHES; j++){
+			for (j = 0; j < NPATCHES && !bonded; j++){
 
 				// r_hat is pointing from n to pid, so opposite signs are needed, my mistake
 				dot_products[1] = dot_product(patch_directions[1][j], r_hat);
 				
 				if (dot_products[0] > coshalfangle && dot_products[1] > coshalfangle) {
 					particle_energy -= epsilon; // attractive
-					bonded = 1;
+					bonded = true;
 
 					// I must obey detailed balance when asigning particle pairs, 
 					// in the same way I must allow for the desctruction of the particle pairs.
@@ -369,9 +476,12 @@ void run_simulation(){
 #elif NDIM==3
 	char extension[6] = "__.ptc"; // Not the nicest way, but prevents segfaults
 #endif
-    sprintf(buffer, "viscol/coords_%.6s", extension);
+    sprintf(buffer, "out/coords_%.6s", extension);
 	output_fd = nice_fopen(buffer, "w");
 	if (output_fd == NULL) return;
+
+	energy_fd = nice_fopen("out/energy.tsv", "w");
+	if (energy_fd == NULL) return;
 
     for(step = 0; step < mc_steps; step++){
         for(n = 0; n < n_particles; n++){
@@ -386,6 +496,7 @@ void run_simulation(){
         }
 
         if(step % output_steps == 0){
+			fprintf(energy_fd, "%li\t%lf\n", step, energy/epsilon);
 //            printf("Step %ld. Move acceptance: %lf\tRotation acceptance: %lf\n",
 //                step,
 //				(double)accepted_mov / total_mov,
@@ -402,14 +513,19 @@ void run_simulation(){
 			accepted_rot = 0;
 			total_mov = 0;
 			total_rot = 0;
-            write_data(step);
+            write_data();
         }
     }
-    write_data(step);
+    write_data();
 	
 	fclose(output_fd);
+	fclose(energy_fd);
 
-	printf("Done simulating!\007\nFinal energy: %lf\n", energy);
+	double rechecked_energy = 0.0;
+    for(n = 0; n < n_particles; ++n) rechecked_energy += particle_energy(n);
+    rechecked_energy *= 0.5;
+
+	printf("Done simulating!\007\nFinal energy: %lf (should be %lf)\n", energy, rechecked_energy);
 }
 
 void read_data(void){
@@ -432,10 +548,10 @@ void read_data(void){
     fclose(fp);
 }
 
-void write_data(long int step){
+void write_data(void){
     int d, n,i,j;
     fprintf(output_fd, "%d\n", n_particles);
-    for(d = 0; d < MAXDIM; d++) fprintf(output_fd, "%lf ", box[d]);
+    for(d = 0; d < MAXDIM; d++) fprintf(output_fd, "%lf\t", box[d]);
 	fprintf(output_fd,"\n");
     for(n = 0; n < n_particles; n++){
 		// <label> <x> <y> <z> <coreRadius> <cosHalfAngle> <capDiameter> <r00> ... <r22> [bondId ...]
@@ -480,6 +596,7 @@ FILE* nice_fopen(const char* path, const char* mode){
 void close_fds(int sig){
 	// Ensure the output files are still properly written to if the program is terminated
 	if (output_fd != NULL) fclose(output_fd);
+	if (energy_fd != NULL) fclose(energy_fd);
 
 	raise(SIGTERM);
 }
