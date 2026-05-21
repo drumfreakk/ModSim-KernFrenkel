@@ -71,3 +71,5 @@ dkms.conf
 
 *.ptc
 *.patch
+
+*.snap

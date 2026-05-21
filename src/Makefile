@@ -19,7 +19,7 @@ prod: clean build_compile
 
 time: time_compile
 
-debug_compile: CFLAGS := -DDEBUG
+debug_compile: CFLAGS := -DVERBOSE
 debug_compile: run
 
 build_compile: level := 3

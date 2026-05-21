@@ -13,7 +13,7 @@
 #define MAXDIM 3 // Maximum number of dimensions, to make the output files work nicely
 #define N 2000
 
-#define NPATCHES 3 
+#define NPATCHES 3
 
 /* Initialization variables */
 const int    mc_steps      = 100000;
@@ -22,7 +22,16 @@ const double density       = 0.8;
 double       delta_r       = 0.1; // Initial step size
 double       delta_a       = 0.1; // Initial angle change size 
 const double beta          = 50;
+
+// Starting condition, choose one of the 2 
+
+// Start from an fcc crystal
 const char*  init_filename = "../fcc/32.dat";
+
+// Start from an equilibrated snapshot
+//const char*  init_filename = "equilibrated_4.snap";
+//#define LOAD_SNAPSHOT
+
 // Fix the diameter at 1.0, add a variable to control that
 const double sigma = 1.0;
 const double epsilon = 1.0;
@@ -55,7 +64,7 @@ FILE* energy_fd = NULL;
 
 void   run_simulation(void);
 
-double particle_energy(int pid);
+double particle_energy(int pid, bool print_bonds);
 int    move_particle(void);
 int    rotate_particle(void);
 
@@ -67,6 +76,7 @@ void   set_rotation_matrix_from_director(int pid, const double d[4]);
 
 void   read_data(void);
 void   write_data(void);
+void   write_snapshot(void);
 void   set_density(void);
 void   init_rotations(void);
 void   check_SBPP(void);
@@ -105,6 +115,7 @@ int main(int argc, char* argv[]){
 }
 
 void init_rotations(void) {
+#ifndef LOAD_SNAPSHOT
 	// Initialise all rotation matrices as identity matrices
 	int n,i,j;
 	for (n = 0; n < n_particles; n++){
@@ -114,7 +125,7 @@ void init_rotations(void) {
 		for (i = 0; i < 3; i++) directors[n][i] = 0.0;
 		directors[n][3] = 1.0;
 	}
-
+#endif
 }
 
 void matrix_vector_product(double res[MAXDIM], const double matrix[MAXDIM][MAXDIM], const double vector[MAXDIM]){
@@ -154,16 +165,22 @@ void print_matrix(double mat[MAXDIM][MAXDIM]){
 	printf("}\n");
 }
 
-double particle_energy(int pid){
+double particle_energy(int pid, bool print_bonds){
     double particle_energy = 0.0;
     int n, d, i, j;
 	double dist2;
 	// if in lambda, determine orientation, otherwise infinity or 0
 
-	const double original_patch_directions[NPATCHES][NDIM] = {{ 0.0,               0.0,  1.0},
-												              { sin(2.0*M_PI/3.0), 0.0, -0.5},
-											  	              {-sin(2.0*M_PI/3.0), 0.0, -0.5}};
-
+#if NPATCHES==3
+	const double original_patch_directions[NPATCHES][NDIM] = {{ 0.0,       0.0,  1.0},
+	                                                          { 0.8660254, 0.0, -0.5},
+	                                                          {-0.8660254, 0.0, -0.5}};
+#elif NPATCHES==4
+	const double original_patch_directions[NPATCHES][NDIM] = {{ 0.57735027,  0.57735027,  0.57735027},
+	                                                          {-0.57735027, -0.57735027,  0.57735027},
+	                                                          { 0.57735027, -0.57735027, -0.57735027},
+	                                                          {-0.57735027,  0.57735027, -0.57735027}};
+#endif
 
     for(n = 0; n < n_particles; ++n){
         if(n == pid) continue;
@@ -178,13 +195,13 @@ double particle_energy(int pid){
 		if (dist < sigma){
 			// This should never occur with the new check in move_particle, but just to be safe.
 			particle_energy = INFINITY; // set energy ot infinity if particles overlap
-			// printf("ERROR: PARTICLE OVERLAP\n");
+			//printf("ERROR: PARTICLE OVERLAP %i %i => %lf\n", pid, n, dist);
 			return particle_energy; 
 		}
 		if (dist > sigma * patchdistance) continue; // 0 energy for non interacting particles
 	
-#ifdef DEBUG
-		printf("Within patch range for particles %i & %i\n", pid, n);
+#ifdef VERBOSE
+//		printf("Within patch range for particles %i & %i\n", pid, n);
 #endif		
 
 		// Get the patch directors properly rotated
@@ -192,11 +209,11 @@ double particle_energy(int pid){
 		for (i = 0; i < NPATCHES; i++) matrix_vector_product(patch_directions[0][i], rot[pid], original_patch_directions[i]);
 		for (i = 0; i < NPATCHES; i++) matrix_vector_product(patch_directions[1][i], rot[n],   original_patch_directions[i]);
 	
-#ifdef DEBUG
-		print_matrix(rot[pid]);
-		print_vector(patch_directions[0][0], 3);
-		print_vector(patch_directions[0][1], 3);
-		print_vector(patch_directions[0][2], 3);
+#ifdef VERBOSE
+//		print_matrix(rot[pid]);
+//		print_vector(patch_directions[0][0], 3);
+//		print_vector(patch_directions[0][1], 3);
+//		print_vector(patch_directions[0][2], 3);
 #endif
 
 		double r_hat[NDIM]; // unit vector pointing from n to pid
@@ -205,17 +222,42 @@ double particle_energy(int pid){
 
 		bool bonded = false; // each particle pair can only have one bond, once this is satisfied we go to next particle
 		// Iterate over all patch combinations
+
+#ifdef VERBOSE
+		if (print_bonds) {
+			printf("Particle %i to %i: ", pid, n);
+			print_vector(r_hat, 3);
+		}
+#endif
 		for (i = 0; i < NPATCHES && !bonded; i++){
+#ifdef VERBOSE
+			if (print_bonds){
+				printf("%i.%i: ", pid, i);
+				print_vector(patch_directions[0][i], 3);
+			}
+#endif
+			
 			dot_products[0] = -dot_product(patch_directions[0][i], r_hat);
 			for (j = 0; j < NPATCHES && !bonded; j++){
+#ifdef VERBOSE
+				if (print_bonds){
+					printf("    %i.%i: ", n, j);
+					print_vector(patch_directions[1][j], 3);
+				}
+#endif
 
 				// r_hat is pointing from n to pid, so opposite signs are needed, my mistake
 				dot_products[1] = dot_product(patch_directions[1][j], r_hat);
 				
-				if (dot_products[0] > coshalfangle && dot_products[1] > coshalfangle) {
+				if (dot_products[0] >= coshalfangle && dot_products[1] >= coshalfangle) {
 					particle_energy -= epsilon; // attractive
 					bonded = true;
-
+#ifdef VERBOSE
+					if (print_bonds){
+						printf("%i.%i <-> %i.%i\n", pid, i, n, j);
+						printf("    %lf, %lf\n", dot_products[0], dot_products[1]);
+					}
+#endif
 					// I must obey detailed balance when asigning particle pairs, 
 					// in the same way I must allow for the desctruction of the particle pairs.
 					// The formation and destruction (simpler) must be deterministic 
@@ -257,7 +299,7 @@ double particle_energy(int pid){
 int move_particle(void){
     int rpid = n_particles * dsfmt_genrand();
 
-    double dE = -particle_energy(rpid); // of course we also assume this is not overlapping
+    double dE = -particle_energy(rpid, false); // of course we also assume this is not overlapping
 
     double old_pos[NDIM];
     int d;
@@ -267,7 +309,7 @@ int move_particle(void){
         r[rpid][d] -= (int)(r[rpid][d] / box[d]) * box[d];
     }
 
-	double new_energy = particle_energy(rpid);
+	double new_energy = particle_energy(rpid, false);
 	
 	if (new_energy != INFINITY) { // autoreject overlapping moves
 		dE += new_energy;
@@ -318,7 +360,7 @@ void generate_random_unit_quaternion(double rv[4]){
 int rotate_particle(void){
     int rpid = n_particles * dsfmt_genrand();
 
-    double dE = -particle_energy(rpid);
+    double dE = -particle_energy(rpid, false);
 
     double new_director[4];
 	int n;
@@ -345,7 +387,7 @@ Get the rotation matrix associated with rv
 
 	set_rotation_matrix_from_director(rpid, new_director);
 
-    dE += particle_energy(rpid);
+    dE += particle_energy(rpid, false);
     if(dE < 0.0 || dsfmt_genrand() < exp(-beta * dE)){
         energy += dE;
 		for (n = 0; n < 4; n++) directors[rpid][n] = new_director[n];
@@ -386,9 +428,11 @@ void run_simulation(){
     set_density();
 
     //for(d = 0; d < NDIM; ++d) assert(r_cut <= 0.5 * box[d]);
-
-    for(n = 0; n < n_particles; ++n) energy += particle_energy(n);
+	energy = 0.0;
+    for(n = 0; n < n_particles; ++n) energy += particle_energy(n, false);
     energy *= 0.5;
+
+	assert(energy != INFINITY);
 
     int accepted_mov = 0;
 	int accepted_rot = 0;
@@ -446,11 +490,13 @@ void run_simulation(){
     }
     write_data();
 	
+	write_snapshot();
+	
 	fclose(output_fd);
 	fclose(energy_fd);
 
 	double rechecked_energy = 0.0;
-    for(n = 0; n < n_particles; ++n) rechecked_energy += particle_energy(n);
+    for(n = 0; n < n_particles; ++n) rechecked_energy += particle_energy(n, true);
     rechecked_energy *= 0.5;
 
 	printf("Done simulating!\007\nFinal energy: %lf (should be %lf)\n", energy, rechecked_energy);
@@ -461,6 +507,19 @@ void read_data(void){
     int n, d;
     double dmin,dmax, diameter;
     fscanf(fp, "%d\n", &n_particles);
+
+#ifdef LOAD_SNAPSHOT
+    for(d = 0; d < MAXDIM; ++d){
+        fscanf(fp, "%lf\t", &dmax);
+        box[d] = fabs(dmax);
+    }
+    
+	for(n = 0; n < n_particles; ++n){
+        for(d = 0; d < MAXDIM; ++d) fscanf(fp, "%lf\t", &r[n][d]);
+		for(d = 0; d < 4; d++) fscanf(fp, "%lf\t", &directors[n][d]);
+		set_rotation_matrix_from_director(n, directors[n]);
+	}
+#else
     for(d = 0; d < NDIM; ++d){
         fscanf(fp, "%lf %lf\n", &dmin, &dmax);
         box[d] = fabs(dmax-dmin);
@@ -473,7 +532,25 @@ void read_data(void){
 		if (NDIM == 2) r[n][2] = 0.0; // Ensure the 2d case is happy
         fscanf(fp, "%lf\n", &diameter);
     }
-    fclose(fp);
+#endif
+
+	fclose(fp);
+}
+
+void write_snapshot(void){
+	int n,d;
+	FILE* snapshot_fd = nice_fopen("out/snapshot.snap", "w");
+	if (snapshot_fd == NULL) return;
+    fprintf(snapshot_fd, "%d\n", n_particles);
+    for(d = 0; d < MAXDIM; d++) fprintf(snapshot_fd, "%lf\t", box[d]);
+	fprintf(snapshot_fd,"\n");
+    
+	for(n = 0; n < n_particles; ++n){
+        for(d = 0; d < MAXDIM; ++d) fprintf(snapshot_fd, "%lf\t", r[n][d]);
+		for(d = 0; d < 4; d++) fprintf(snapshot_fd, "%lf\t", directors[n][d]);
+		fprintf(snapshot_fd, "\n");
+	}
+	fclose(snapshot_fd);
 }
 
 void write_data(void){
@@ -485,11 +562,11 @@ void write_data(void){
 		// <label> <x> <y> <z> <coreRadius> <cosHalfAngle> <capDiameter> <r00> ... <r22> [bondId ...]
 		fprintf(output_fd, "a\t");
         for(d = 0; d < MAXDIM; d++) fprintf(output_fd, "%f\t", r[n][d]);
-        fprintf(output_fd, "%lf\t%lf\t%lf\t", 0.5, coshalfangle, patchdistance);
+        fprintf(output_fd, "%lf\t%lf\t%lf\t", sigma/2.0, coshalfangle, sigma*patchdistance);
 		
 		// Rotation matrix, see https://en.wikipedia.org/wiki/Rotation_matrix?useskin=vector#In_three_dimensions
 		for (i = 0; i < MAXDIM; i++){
-			for (j = 0; j < MAXDIM; j++) fprintf(output_fd, "%lf\t", rot[n][i][j]);
+			for (j = 0; j < MAXDIM; j++) fprintf(output_fd, "%lf\t", rot[n][j][i]);
 		}
 
 		// Bonds
