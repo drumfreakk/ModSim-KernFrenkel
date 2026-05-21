@@ -64,10 +64,20 @@ void   read_data(void);
 void   write_data(long int step);
 void   set_density(void);
 void   init_rotations(void);
+void check_SBPP(void);
 
 FILE*  nice_fopen(const char* path, const char* mode);
 
 //TODO: generate bonds
+
+void check_SBPP(void) { // check if we are in Single Bond Per Patch condition, same as from the paper
+	// SBPP condition: sin(theta_max) < 1 / (2 * lambda)
+	double sin_theta_max = sqrt(1.0 - coshalfangle * coshalfangle);
+	double threshold = 1.0 / (2.0 * patchdistance);
+	if (sin_theta_max >= threshold) {
+		printf("Error: SBPP is not fulfilled\n");
+	}
+}
 
 int main(int argc, char* argv[]){
 	size_t seed = time(NULL);
@@ -76,6 +86,7 @@ int main(int argc, char* argv[]){
 
 	assert(delta_r > 0.0);
     assert(delta_a > 0.0);
+	check_SBPP();
 
 	run_simulation();
 
@@ -122,6 +133,7 @@ double particle_energy(int pid){
 												 {-0.5,0.0,sin(2.0*M_PI/3.0)},
 											  	 {-0.5,0.0,-sin(2.0*M_PI/3.0)}};
 
+
     for(n = 0; n < n_particles; ++n){
         if(n == pid) continue;
 		double r_ij[NDIM]; // replaced min_d with r_ij so we can store the distances for later
@@ -152,8 +164,10 @@ double particle_energy(int pid){
 	//		dot_product[0] += rot[pid][0][d] * r_hat[d];
 	//		dot_product[1] += rot[n][0][d] * (-r_hat[d]); // r_hat points from n to pid, so -r_hat points from pid to n
 		}
+
+		int bonded = 0; // each particle pair can only have one bond, once this is satisfied we go to next particle
 		// Iterate over all patch combinations
-		for (i = 0; i < NPATCHES; i++){
+		for (i = 0; i < NPATCHES && !bonded; i++){
 			for (j = 0; j < NPATCHES; j++){
 
 				// r_hat is pointing from n to pid, so opposite signs are needed, my mistake
@@ -161,6 +175,7 @@ double particle_energy(int pid){
 				dot_products[1] = dot_product(patch_directions[1][j], r_hat);
 				if (dot_products[0] > coshalfangle && dot_products[1] > coshalfangle) {
 					particle_energy -= epsilon; // attractive
+					bonded = 1;
 
 					// I must obey detailed balance when asigning particle pairs, 
 					// in the same way I must allow for the desctruction of the particle pairs.
@@ -179,6 +194,8 @@ double particle_energy(int pid){
 					// 1. Match bonds in a deterministic manner upon initialisation (maybe implement if init condition)
 					// 2. Upon each particled moved, destroy pid bonds and reform them deterministcally
 					// 3. Pass on the new energy based on new bonds
+
+					// make a separate would interact file and then calculate energy once bonds are formed
 				}
 			}
 		}
