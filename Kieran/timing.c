@@ -45,12 +45,12 @@ int main(void){
 		/**** PUT CODE TO TIME BETWEEN THESE COMMENT BLOCKS ****/
 
 		//sqrt(number); // 21 ns
-		//number*number; // 21 ns
+		number*number; // 21 ns
 		//round(number);
 
-		for(d = 0; d < RPTS; d++){
-			out = test_func(number);
-		}
+//		for(d = 0; d < RPTS; d++){
+//			out = test_func(number);
+//		}
 		
 
 		/*******************************************************/

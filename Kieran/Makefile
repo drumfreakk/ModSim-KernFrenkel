@@ -25,8 +25,10 @@ debug_compile: run
 build_compile: level := 3
 build_compile: run
 
-time_compile: filename := timing
-time_compile: build_compile
+time_compile: filename:=timing
+time_compile: level := 0
+time_compile: debug_compile
+
 
 clean:
 	rm -f build/*

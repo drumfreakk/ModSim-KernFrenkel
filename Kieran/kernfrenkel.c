@@ -2,6 +2,7 @@
 #include <time.h>
 #include <assert.h>
 #include <math.h>
+#include <signal.h>
 #include "mt19937.h"
 
 #ifndef M_PI
@@ -27,12 +28,12 @@ const double sigma = 1.0;
 const double epsilon = 1.0;
 
 // Kern Frenkel Patchy particle model parameters
-const double patchdistance = 1.5; // Lambda, multiple of the diameter to which the path extends
+const double patchdistance = 1.13; // Lambda, multiple of the diameter to which the path extends
 const double coshalfangle = 0.9; // ~cos(pi/8) as a first try, some nice value for now
 
 
 /* Simulation variables */
-int n_particles = 0;
+int    n_particles = 0;
 double r[N][MAXDIM];           // Positions of the particles
 double directors[N][4];        // Quaternion rotations of the particles. The source of truth for orientation
 // Note that the quaternion is stored as:
@@ -47,6 +48,8 @@ double energy = 0.0;
 // Example particle_bonds[0][1][2] = 60 means that the second patch of particle 0 is bonded to the third patch of particle 60 
 int particle_bonds[N][NPATCHES][NPATCHES] = {{{-1}}}; // for each particle, stores -1 if patch unoccupied or the pid of the partner particle at the N_partner_patch location
 
+// FD to output all particle data to
+FILE* output_fd = NULL;
 
 void   run_simulation(void);
 
@@ -64,9 +67,10 @@ void   read_data(void);
 void   write_data(long int step);
 void   set_density(void);
 void   init_rotations(void);
-void check_SBPP(void);
+void   check_SBPP(void);
 
 FILE*  nice_fopen(const char* path, const char* mode);
+void   close_fds(int sig);
 
 //TODO: generate bonds
 
@@ -87,6 +91,8 @@ int main(int argc, char* argv[]){
 	assert(delta_r > 0.0);
     assert(delta_a > 0.0);
 	check_SBPP();
+	
+	signal(SIGINT, *close_fds);
 
 	run_simulation();
 
@@ -159,20 +165,18 @@ double particle_energy(int pid){
 		
 		double r_hat[NDIM]; // unit vector pointing from n to pid
 		double dot_products[2] = {0.0,0.0}; // 0 for pid, 1 for nth particle
-		for(d = 0; d < NDIM; ++d){
-			r_hat[d] = r_ij[d]/dist;
-	//		dot_product[0] += rot[pid][0][d] * r_hat[d];
-	//		dot_product[1] += rot[n][0][d] * (-r_hat[d]); // r_hat points from n to pid, so -r_hat points from pid to n
-		}
+		for(d = 0; d < NDIM; ++d) r_hat[d] = r_ij[d]/dist;
 
 		int bonded = 0; // each particle pair can only have one bond, once this is satisfied we go to next particle
 		// Iterate over all patch combinations
 		for (i = 0; i < NPATCHES && !bonded; i++){
+			dot_products[0] = -dot_product(patch_directions[0][i], r_hat);
+			
 			for (j = 0; j < NPATCHES; j++){
 
 				// r_hat is pointing from n to pid, so opposite signs are needed, my mistake
-				dot_products[0] = -dot_product(patch_directions[0][i], r_hat);
 				dot_products[1] = dot_product(patch_directions[1][j], r_hat);
+				
 				if (dot_products[0] > coshalfangle && dot_products[1] > coshalfangle) {
 					particle_energy -= epsilon; // attractive
 					bonded = 1;
@@ -221,7 +225,7 @@ int move_particle(void){
     double dE = -particle_energy(rpid); // of course we also assume this is not overlapping
 
     double old_pos[NDIM];
-    int n,d;
+    int d;
     for(d = 0; d < NDIM; d++){
         old_pos[d] = r[rpid][d];
         r[rpid][d] += delta_r * (2.0 * dsfmt_genrand() - 1.0) + box[d];
@@ -355,6 +359,20 @@ void run_simulation(){
 	int accepted_rot = 0;
 	int total_mov = 0;
 	int total_rot = 0;
+
+
+// Open the output file
+// This way, it outputs all snapshots into a single file, which lets CVT load them all in one go
+    char buffer[128];
+#if NDIM==2
+	char extension[6] = ".patch";
+#elif NDIM==3
+	char extension[6] = "__.ptc"; // Not the nicest way, but prevents segfaults
+#endif
+    sprintf(buffer, "viscol/coords_%.6s", extension);
+	output_fd = nice_fopen(buffer, "w");
+	if (output_fd == NULL) return;
+
     for(step = 0; step < mc_steps; step++){
         for(n = 0; n < n_particles; n++){
 			// Probabilistically choose whether to move or rotate a particle, to obey detailed balance
@@ -388,6 +406,8 @@ void run_simulation(){
         }
     }
     write_data(step);
+	
+	fclose(output_fd);
 
 	printf("Done simulating!\007\nFinal energy: %lf\n", energy);
 }
@@ -413,39 +433,28 @@ void read_data(void){
 }
 
 void write_data(long int step){
-    char buffer[128];
-#if NDIM==2
-	char extension[6] = ".patch";
-#elif NDIM==3
-	char extension[6] = "__.ptc"; // Not the nicest way, but prevents segfaults
-#endif
-    sprintf(buffer, "viscol/coords_step%07li%.6s", step, extension);
-	FILE* fd = nice_fopen(buffer, "w");
-	if (fd == NULL) return;
     int d, n,i,j;
-    fprintf(fd, "%d\n", n_particles);
-    for(d = 0; d < MAXDIM; d++) fprintf(fd, "%lf ", box[d]);
-	fprintf(fd,"\n");
+    fprintf(output_fd, "%d\n", n_particles);
+    for(d = 0; d < MAXDIM; d++) fprintf(output_fd, "%lf ", box[d]);
+	fprintf(output_fd,"\n");
     for(n = 0; n < n_particles; n++){
 		// <label> <x> <y> <z> <coreRadius> <cosHalfAngle> <capDiameter> <r00> ... <r22> [bondId ...]
-		fprintf(fd, "a\t");
-        for(d = 0; d < MAXDIM; d++) fprintf(fd, "%f\t", r[n][d]);
-        fprintf(fd, "%lf\t%lf\t%lf\t", 0.5, coshalfangle, patchdistance);
+		fprintf(output_fd, "a\t");
+        for(d = 0; d < MAXDIM; d++) fprintf(output_fd, "%f\t", r[n][d]);
+        fprintf(output_fd, "%lf\t%lf\t%lf\t", 0.5, coshalfangle, patchdistance);
 		
 		// Rotation matrix, see https://en.wikipedia.org/wiki/Rotation_matrix?useskin=vector#In_three_dimensions
 		for (i = 0; i < MAXDIM; i++){
-			for (j = 0; j < MAXDIM; j++) fprintf(fd, "%lf\t", rot[n][i][j]);
+			for (j = 0; j < MAXDIM; j++) fprintf(output_fd, "%lf\t", rot[n][i][j]);
 		}
 
 		// Bonds
 		// 3 patches -> 3 potential bonds
 		// Eventually, this can become the ids of the particle it is bonded to I think
 		// For now, -1 indicates no bond
-		for (i = 0; i < NPATCHES-1; i++) fprintf(fd, "-1\t");
-		fprintf(fd,"-1\n");
-
+		for (i = 0; i < NPATCHES-1; i++) fprintf(output_fd, "-1\t");
+		fprintf(output_fd,"-1\n");
     }
-    fclose(fd);
 }
 
 void set_density(void){
@@ -466,4 +475,11 @@ FILE* nice_fopen(const char* path, const char* mode){
 	FILE* fd = fopen(path, mode);
 	if (fd == NULL)	printf("Unable to open file \"%s\"\n", path);
 	return fd;
+}
+
+void close_fds(int sig){
+	// Ensure the output files are still properly written to if the program is terminated
+	if (output_fd != NULL) fclose(output_fd);
+
+	raise(SIGTERM);
 }
