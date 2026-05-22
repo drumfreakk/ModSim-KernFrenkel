@@ -3,6 +3,7 @@
 #include <assert.h>
 #include <math.h>
 #include <signal.h>
+#include <stdbool.h>
 #include "mt19937.h"
 
 #ifndef M_PI
@@ -89,6 +90,20 @@ void   print_matrix(double mat[MAXDIM][MAXDIM]);
 
 //TODO: generate bonds
 
+FILE* nice_fopen(const char* path, const char* mode){
+	FILE* fd = fopen(path, mode);
+	if (fd == NULL)	printf("Unable to open file \"%s\"\n", path);
+	return fd;
+}
+
+void close_fds(int sig){
+	// Ensure the output files are still properly written to if the program is terminated
+	if (output_fd != NULL) fclose(output_fd);
+	if (energy_fd != NULL) fclose(energy_fd);
+
+	raise(SIGTERM);
+}
+
 void check_SBPP(void) { // check if we are in Single Bond Per Patch condition, same as from the paper
 	// SBPP condition: sin(theta_max) < 1 / (2 * lambda)
 	double sin_theta_max = sqrt(1.0 - coshalfangle * coshalfangle);
@@ -98,21 +113,6 @@ void check_SBPP(void) { // check if we are in Single Bond Per Patch condition, s
 	}
 }
 
-int main(int argc, char* argv[]){
-	size_t seed = time(NULL);
-    dsfmt_seed(seed);
-	printf("Seed: %lu\n", seed);
-
-	assert(delta_r > 0.0);
-    assert(delta_a > 0.0);
-	check_SBPP();
-	
-	signal(SIGINT, *close_fds);
-
-	run_simulation();
-
-    return 0;
-}
 
 void init_rotations(void) {
 #ifndef LOAD_SNAPSHOT
@@ -165,22 +165,113 @@ void print_matrix(double mat[MAXDIM][MAXDIM]){
 	printf("}\n");
 }
 
+void read_data(void){
+    FILE* fp = nice_fopen(init_filename, "r");
+    int n, d;
+    double dmin,dmax, diameter;
+    fscanf(fp, "%d\n", &n_particles);
+
+	#ifdef LOAD_SNAPSHOT
+		for(d = 0; d < MAXDIM; ++d){
+			fscanf(fp, "%lf\t", &dmax);
+			box[d] = fabs(dmax);
+		}
+		
+		for(n = 0; n < n_particles; ++n){
+			for(d = 0; d < MAXDIM; ++d) fscanf(fp, "%lf\t", &r[n][d]);
+			for(d = 0; d < 4; d++) fscanf(fp, "%lf\t", &directors[n][d]);
+			set_rotation_matrix_from_director(n, directors[n]);
+		}
+	#else
+		for(d = 0; d < NDIM; ++d){
+			fscanf(fp, "%lf %lf\n", &dmin, &dmax);
+			box[d] = fabs(dmax-dmin);
+		}
+
+		if (NDIM == 2) box[2] = 0.0; // Ensure the 2d case is happy
+
+		for(n = 0; n < n_particles; ++n){
+			for(d = 0; d < NDIM; ++d) fscanf(fp, "%lf\t", &r[n][d]);
+			if (NDIM == 2) r[n][2] = 0.0; // Ensure the 2d case is happy
+			fscanf(fp, "%lf\n", &diameter);
+		}
+	#endif
+
+	fclose(fp);
+}
+
+void write_snapshot(void){
+	int n,d;
+	FILE* snapshot_fd = nice_fopen("out/snapshot.snap", "w");
+	if (snapshot_fd == NULL) return;
+    fprintf(snapshot_fd, "%d\n", n_particles);
+    for(d = 0; d < MAXDIM; d++) fprintf(snapshot_fd, "%lf\t", box[d]);
+	fprintf(snapshot_fd,"\n");
+    
+	for(n = 0; n < n_particles; ++n){
+        for(d = 0; d < MAXDIM; ++d) fprintf(snapshot_fd, "%lf\t", r[n][d]);
+		for(d = 0; d < 4; d++) fprintf(snapshot_fd, "%lf\t", directors[n][d]);
+		fprintf(snapshot_fd, "\n");
+	}
+	fclose(snapshot_fd);
+}
+
+void write_data(void){
+    int d, n,i,j;
+    fprintf(output_fd, "%d\n", n_particles);
+    for(d = 0; d < MAXDIM; d++) fprintf(output_fd, "%lf\t", box[d]);
+	fprintf(output_fd,"\n");
+    for(n = 0; n < n_particles; n++){
+		// <label> <x> <y> <z> <coreRadius> <cosHalfAngle> <capDiameter> <r00> ... <r22> [bondId ...]
+		fprintf(output_fd, "a\t");
+        for(d = 0; d < MAXDIM; d++) fprintf(output_fd, "%f\t", r[n][d]);
+        fprintf(output_fd, "%lf\t%lf\t%lf\t", sigma/2.0, coshalfangle, sigma*patchdistance);
+		
+		// Rotation matrix, see https://en.wikipedia.org/wiki/Rotation_matrix?useskin=vector#In_three_dimensions
+		for (i = 0; i < MAXDIM; i++){
+			for (j = 0; j < MAXDIM; j++) fprintf(output_fd, "%lf\t", rot[n][j][i]);
+		}
+
+		// Bonds
+		// 3 patches -> 3 potential bonds
+		// Eventually, this can become the ids of the particle it is bonded to I think
+		// For now, -1 indicates no bond
+		for (i = 0; i < NPATCHES-1; i++) fprintf(output_fd, "-1\t");
+		fprintf(output_fd,"-1\n");
+    }
+}
+
+void set_density(void){
+    double volume = 1.0;
+    int d, n;
+    for(d = 0; d < NDIM; ++d) volume *= box[d];
+
+    double target_volume = n_particles / density;
+    double scale_factor = pow(target_volume / volume, 1.0 / NDIM);
+
+    for(n = 0; n < n_particles; ++n){
+        for(d = 0; d < NDIM; ++d) r[n][d] *= scale_factor;
+    }
+    for(d = 0; d < NDIM; ++d) box[d] *= scale_factor;
+}
+
+
 double particle_energy(int pid, bool print_bonds){
     double particle_energy = 0.0;
     int n, d, i, j;
 	double dist2;
 	// if in lambda, determine orientation, otherwise infinity or 0
 
-#if NPATCHES==3
-	const double original_patch_directions[NPATCHES][NDIM] = {{ 0.0,       0.0,  1.0},
-	                                                          { 0.8660254, 0.0, -0.5},
-	                                                          {-0.8660254, 0.0, -0.5}};
-#elif NPATCHES==4
-	const double original_patch_directions[NPATCHES][NDIM] = {{ 0.57735027,  0.57735027,  0.57735027},
-	                                                          {-0.57735027, -0.57735027,  0.57735027},
-	                                                          { 0.57735027, -0.57735027, -0.57735027},
-	                                                          {-0.57735027,  0.57735027, -0.57735027}};
-#endif
+	#if NPATCHES==3
+		const double original_patch_directions[NPATCHES][NDIM] = {{ 0.0,       0.0,  1.0},
+																{ 0.8660254, 0.0, -0.5},
+																{-0.8660254, 0.0, -0.5}};
+	#elif NPATCHES==4
+		const double original_patch_directions[NPATCHES][NDIM] = {{ 0.57735027,  0.57735027,  0.57735027},
+																{-0.57735027, -0.57735027,  0.57735027},
+																{ 0.57735027, -0.57735027, -0.57735027},
+																{-0.57735027,  0.57735027, -0.57735027}};
+	#endif
 
     for(n = 0; n < n_particles; ++n){
         if(n == pid) continue;
@@ -200,21 +291,21 @@ double particle_energy(int pid, bool print_bonds){
 		}
 		if (dist > sigma * patchdistance) continue; // 0 energy for non interacting particles
 	
-#ifdef VERBOSE
-//		printf("Within patch range for particles %i & %i\n", pid, n);
-#endif		
+	#ifdef VERBOSE
+	//		printf("Within patch range for particles %i & %i\n", pid, n);
+	#endif		
 
 		// Get the patch directors properly rotated
 		double patch_directions[2][NPATCHES][MAXDIM];
 		for (i = 0; i < NPATCHES; i++) matrix_vector_product(patch_directions[0][i], rot[pid], original_patch_directions[i]);
 		for (i = 0; i < NPATCHES; i++) matrix_vector_product(patch_directions[1][i], rot[n],   original_patch_directions[i]);
 	
-#ifdef VERBOSE
-//		print_matrix(rot[pid]);
-//		print_vector(patch_directions[0][0], 3);
-//		print_vector(patch_directions[0][1], 3);
-//		print_vector(patch_directions[0][2], 3);
-#endif
+	#ifdef VERBOSE
+	//		print_matrix(rot[pid]);
+	//		print_vector(patch_directions[0][0], 3);
+	//		print_vector(patch_directions[0][1], 3);
+	//		print_vector(patch_directions[0][2], 3);
+	#endif
 
 		double r_hat[NDIM]; // unit vector pointing from n to pid
 		double dot_products[2] = {0.0,0.0}; // 0 for pid, 1 for nth particle
@@ -223,28 +314,28 @@ double particle_energy(int pid, bool print_bonds){
 		bool bonded = false; // each particle pair can only have one bond, once this is satisfied we go to next particle
 		// Iterate over all patch combinations
 
-#ifdef VERBOSE
-		if (print_bonds) {
-			printf("Particle %i to %i: ", pid, n);
-			print_vector(r_hat, 3);
-		}
-#endif
-		for (i = 0; i < NPATCHES && !bonded; i++){
-#ifdef VERBOSE
-			if (print_bonds){
-				printf("%i.%i: ", pid, i);
-				print_vector(patch_directions[0][i], 3);
+	#ifdef VERBOSE
+			if (print_bonds) {
+				printf("Particle %i to %i: ", pid, n);
+				print_vector(r_hat, 3);
 			}
-#endif
-			
-			dot_products[0] = -dot_product(patch_directions[0][i], r_hat);
-			for (j = 0; j < NPATCHES && !bonded; j++){
-#ifdef VERBOSE
+	#endif
+			for (i = 0; i < NPATCHES && !bonded; i++){
+	#ifdef VERBOSE
 				if (print_bonds){
-					printf("    %i.%i: ", n, j);
-					print_vector(patch_directions[1][j], 3);
+					printf("%i.%i: ", pid, i);
+					print_vector(patch_directions[0][i], 3);
 				}
-#endif
+	#endif
+				
+				dot_products[0] = -dot_product(patch_directions[0][i], r_hat);
+				for (j = 0; j < NPATCHES && !bonded; j++){
+	#ifdef VERBOSE
+					if (print_bonds){
+						printf("    %i.%i: ", n, j);
+						print_vector(patch_directions[1][j], 3);
+					}
+	#endif
 
 				// r_hat is pointing from n to pid, so opposite signs are needed, my mistake
 				dot_products[1] = dot_product(patch_directions[1][j], r_hat);
@@ -252,12 +343,12 @@ double particle_energy(int pid, bool print_bonds){
 				if (dot_products[0] >= coshalfangle && dot_products[1] >= coshalfangle) {
 					particle_energy -= epsilon; // attractive
 					bonded = true;
-#ifdef VERBOSE
-					if (print_bonds){
-						printf("%i.%i <-> %i.%i\n", pid, i, n, j);
-						printf("    %lf, %lf\n", dot_products[0], dot_products[1]);
-					}
-#endif
+	#ifdef VERBOSE
+						if (print_bonds){
+							printf("%i.%i <-> %i.%i\n", pid, i, n, j);
+							printf("    %lf, %lf\n", dot_products[0], dot_products[1]);
+						}
+	#endif
 					// I must obey detailed balance when asigning particle pairs, 
 					// in the same way I must allow for the desctruction of the particle pairs.
 					// The formation and destruction (simpler) must be deterministic 
@@ -295,6 +386,7 @@ double particle_energy(int pid, bool print_bonds){
     }
     return particle_energy;
 }
+
 
 int move_particle(void){
     int rpid = n_particles * dsfmt_genrand();
@@ -365,15 +457,15 @@ int rotate_particle(void){
     double new_director[4];
 	int n;
 	
-/* Based on Frenkel & Smit, 1996:
-Specify the orientation of the particle with the unit quaternion orientation
-Generate a random unit quaternion rv (Vesely, 1982)
-Get a rotated orientation vector: rv = orientation + delta_a * rv
-Normalise rv again
-Get the rotation matrix associated with rv
-*/
+	/* Based on Frenkel & Smit, 1996:
+	Specify the orientation of the particle with the unit quaternion orientation
+	Generate a random unit quaternion rv (Vesely, 1982)
+	Get a rotated orientation vector: rv = orientation + delta_a * rv
+	Normalise rv again
+	Get the rotation matrix associated with rv
+	*/
 
-// Generate the unit quaternion
+	// Generate the unit quaternion
 	double rv[4]; // Random unit 4-vector
 	generate_random_unit_quaternion(rv);
 
@@ -443,11 +535,11 @@ void run_simulation(){
 // Open the output file
 // This way, it outputs all snapshots into a single file, which lets CVT load them all in one go
     char buffer[128];
-#if NDIM==2
-	char extension[6] = ".patch";
-#elif NDIM==3
-	char extension[6] = "__.ptc"; // Not the nicest way, but prevents segfaults
-#endif
+	#if NDIM==2
+		char extension[6] = ".patch";
+	#elif NDIM==3
+		char extension[6] = "__.ptc"; // Not the nicest way, but prevents segfaults
+	#endif
     sprintf(buffer, "out/coords_%.6s", extension);
 	output_fd = nice_fopen(buffer, "w");
 	if (output_fd == NULL) return;
@@ -502,106 +594,19 @@ void run_simulation(){
 	printf("Done simulating!\007\nFinal energy: %lf (should be %lf)\n", energy, rechecked_energy);
 }
 
-void read_data(void){
-    FILE* fp = nice_fopen(init_filename, "r");
-    int n, d;
-    double dmin,dmax, diameter;
-    fscanf(fp, "%d\n", &n_particles);
 
-#ifdef LOAD_SNAPSHOT
-    for(d = 0; d < MAXDIM; ++d){
-        fscanf(fp, "%lf\t", &dmax);
-        box[d] = fabs(dmax);
-    }
-    
-	for(n = 0; n < n_particles; ++n){
-        for(d = 0; d < MAXDIM; ++d) fscanf(fp, "%lf\t", &r[n][d]);
-		for(d = 0; d < 4; d++) fscanf(fp, "%lf\t", &directors[n][d]);
-		set_rotation_matrix_from_director(n, directors[n]);
-	}
-#else
-    for(d = 0; d < NDIM; ++d){
-        fscanf(fp, "%lf %lf\n", &dmin, &dmax);
-        box[d] = fabs(dmax-dmin);
-    }
+int main(int argc, char* argv[]){
+	size_t seed = time(NULL);
+    dsfmt_seed(seed);
+	printf("Seed: %lu\n", seed);
 
-	if (NDIM == 2) box[2] = 0.0; // Ensure the 2d case is happy
+	assert(delta_r > 0.0);
+    assert(delta_a > 0.0);
+	check_SBPP();
+	
+	signal(SIGINT, *close_fds);
 
-    for(n = 0; n < n_particles; ++n){
-        for(d = 0; d < NDIM; ++d) fscanf(fp, "%lf\t", &r[n][d]);
-		if (NDIM == 2) r[n][2] = 0.0; // Ensure the 2d case is happy
-        fscanf(fp, "%lf\n", &diameter);
-    }
-#endif
+	run_simulation();
 
-	fclose(fp);
-}
-
-void write_snapshot(void){
-	int n,d;
-	FILE* snapshot_fd = nice_fopen("out/snapshot.snap", "w");
-	if (snapshot_fd == NULL) return;
-    fprintf(snapshot_fd, "%d\n", n_particles);
-    for(d = 0; d < MAXDIM; d++) fprintf(snapshot_fd, "%lf\t", box[d]);
-	fprintf(snapshot_fd,"\n");
-    
-	for(n = 0; n < n_particles; ++n){
-        for(d = 0; d < MAXDIM; ++d) fprintf(snapshot_fd, "%lf\t", r[n][d]);
-		for(d = 0; d < 4; d++) fprintf(snapshot_fd, "%lf\t", directors[n][d]);
-		fprintf(snapshot_fd, "\n");
-	}
-	fclose(snapshot_fd);
-}
-
-void write_data(void){
-    int d, n,i,j;
-    fprintf(output_fd, "%d\n", n_particles);
-    for(d = 0; d < MAXDIM; d++) fprintf(output_fd, "%lf\t", box[d]);
-	fprintf(output_fd,"\n");
-    for(n = 0; n < n_particles; n++){
-		// <label> <x> <y> <z> <coreRadius> <cosHalfAngle> <capDiameter> <r00> ... <r22> [bondId ...]
-		fprintf(output_fd, "a\t");
-        for(d = 0; d < MAXDIM; d++) fprintf(output_fd, "%f\t", r[n][d]);
-        fprintf(output_fd, "%lf\t%lf\t%lf\t", sigma/2.0, coshalfangle, sigma*patchdistance);
-		
-		// Rotation matrix, see https://en.wikipedia.org/wiki/Rotation_matrix?useskin=vector#In_three_dimensions
-		for (i = 0; i < MAXDIM; i++){
-			for (j = 0; j < MAXDIM; j++) fprintf(output_fd, "%lf\t", rot[n][j][i]);
-		}
-
-		// Bonds
-		// 3 patches -> 3 potential bonds
-		// Eventually, this can become the ids of the particle it is bonded to I think
-		// For now, -1 indicates no bond
-		for (i = 0; i < NPATCHES-1; i++) fprintf(output_fd, "-1\t");
-		fprintf(output_fd,"-1\n");
-    }
-}
-
-void set_density(void){
-    double volume = 1.0;
-    int d, n;
-    for(d = 0; d < NDIM; ++d) volume *= box[d];
-
-    double target_volume = n_particles / density;
-    double scale_factor = pow(target_volume / volume, 1.0 / NDIM);
-
-    for(n = 0; n < n_particles; ++n){
-        for(d = 0; d < NDIM; ++d) r[n][d] *= scale_factor;
-    }
-    for(d = 0; d < NDIM; ++d) box[d] *= scale_factor;
-}
-
-FILE* nice_fopen(const char* path, const char* mode){
-	FILE* fd = fopen(path, mode);
-	if (fd == NULL)	printf("Unable to open file \"%s\"\n", path);
-	return fd;
-}
-
-void close_fds(int sig){
-	// Ensure the output files are still properly written to if the program is terminated
-	if (output_fd != NULL) fclose(output_fd);
-	if (energy_fd != NULL) fclose(energy_fd);
-
-	raise(SIGTERM);
+    return 0;
 }
