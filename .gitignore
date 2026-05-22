@@ -73,3 +73,9 @@ dkms.conf
 *.patch
 
 *.snap
+
+# my random folder and other added files
+MateoRandom/
+.DS_Store
+.vscode
+
