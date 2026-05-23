@@ -4,6 +4,8 @@
 #include <math.h>
 #include <signal.h>
 #include <stdbool.h>
+#include <stdlib.h>
+#include <string.h>
 #include "mt19937.h"
 
 #ifndef M_PI
@@ -19,10 +21,10 @@
 /* Initialization variables */
 const int    mc_steps      = 100000;
 const int    output_steps  = 100;
-const double density       = 0.8;
+double density       = 0.8;
 double       delta_r       = 0.1; // Initial step size
 double       delta_a       = 0.1; // Initial angle change size 
-const double beta          = 50;
+double beta          = 50;
 
 // Starting condition, choose one of the 2 
 
@@ -38,9 +40,10 @@ const double sigma = 1.0;
 const double epsilon = 1.0;
 
 // Kern Frenkel Patchy particle model parameters
-const double patchdistance = 1.13; // Lambda, multiple of the diameter to which the path extends
-const double coshalfangle = 0.9; // ~cos(pi/8) as a first try, some nice value for now
+double patchdistance = 1.13; // Lambda, multiple of the diameter to which the path extends
+double coshalfangle = 0.9; // ~cos(pi/8) as a first try, some nice value for now
 
+static char output_dir[256] = "out";
 
 /* Simulation variables */
 int    n_particles = 0;
@@ -202,7 +205,9 @@ void read_data(void){
 
 void write_snapshot(void){
 	int n,d;
-	FILE* snapshot_fd = nice_fopen("out/snapshot.snap", "w");
+	char file_path[128];
+	sprintf(file_path, "%s/snapshot.snap", output_dir);
+	FILE* snapshot_fd = nice_fopen(file_path, "w");
 	if (snapshot_fd == NULL) return;
     fprintf(snapshot_fd, "%d\n", n_particles);
     for(d = 0; d < MAXDIM; d++) fprintf(snapshot_fd, "%lf\t", box[d]);
@@ -238,6 +243,51 @@ void write_data(void){
 		// For now, -1 indicates no bond
 		for (i = 0; i < NPATCHES-1; i++) fprintf(output_fd, "-1\t");
 		fprintf(output_fd,"-1\n");
+    }
+}
+
+// Load the data from MakeFile if using temp_density or lambda_cos
+void classify_makefile_args(int argc, char* argv[]){
+    for (int i = 1; i < argc; i++){
+        const char* arg = argv[i];
+
+        if (strcmp(arg, "--outdir") == 0){
+            sprintf(output_dir, "%s", argv[i + 1]);
+            i++;
+            continue;
+        }
+
+        if (strcmp(arg, "--patchdistance") == 0){
+			patchdistance = atof(argv[i + 1]);
+            i++;
+            continue;
+        }
+
+        if (strcmp(arg, "--coshalfangle") == 0){
+			coshalfangle = atof(argv[i + 1]);
+            i++;
+            continue;
+        }
+
+        if (strcmp(arg, "--beta") == 0){
+            beta = atof(argv[i + 1]);
+            i++;
+            continue;
+        }
+
+        if (strcmp(arg, "--temperature") == 0){
+            beta = 1.0 / atof(argv[i + 1]);
+            i++;
+            continue;
+        }
+
+        if (strcmp(arg, "--density") == 0){
+            density = atof(argv[i + 1]);
+            i++;
+            continue;
+        }
+
+        fprintf(stderr, "Unknown argument: %s\n", arg);
     }
 }
 
@@ -532,19 +582,21 @@ void run_simulation(){
 	int total_rot = 0;
 
 
-// Open the output file
-// This way, it outputs all snapshots into a single file, which lets CVT load them all in one go
+	// Open the output file
+	// This way, it outputs all snapshots into a single file, which lets CVT load them all in one go
     char buffer[128];
 	#if NDIM==2
 		char extension[6] = ".patch";
 	#elif NDIM==3
 		char extension[6] = "__.ptc"; // Not the nicest way, but prevents segfaults
 	#endif
-    sprintf(buffer, "out/coords_%.6s", extension);
+
+	sprintf(buffer, "%s/coords_%.6s", output_dir, extension);
 	output_fd = nice_fopen(buffer, "w");
 	if (output_fd == NULL) return;
 
-	energy_fd = nice_fopen("out/energy.tsv", "w");
+	sprintf(buffer, "%s/energy.tsv", output_dir);
+	energy_fd = nice_fopen(buffer, "w");
 	if (energy_fd == NULL) return;
 
     for(step = 0; step < mc_steps; step++){
@@ -602,6 +654,8 @@ int main(int argc, char* argv[]){
 
 	assert(delta_r > 0.0);
     assert(delta_a > 0.0);
+
+	classify_makefile_args(argc, argv);
 	check_SBPP();
 	
 	signal(SIGINT, *close_fds);

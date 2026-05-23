@@ -2,6 +2,21 @@ level := g
 
 filename := kernfrenkel
 
+# Variables to run through
+OUT_BASE ?= out
+
+# Those satisfy the SBPP condition
+COS_LIST ?= 0.97 0.98 0.99
+LAMBDA_LIST ?= 1.02 1.12 1.22 1.32 1.42 1.52 1.62 1.72 1.82 1.92 2.02
+
+# LAMBDA_LIST ?= 1.05 1.10 1.15
+# COS_LIST ?= 0.85 0.90 0.95
+
+# Random place holder currently
+TEMPERATURES ?= 0.02 0.03 0.04
+DENSITIES ?= 0.7 0.8 0.9
+
+
 run: out
 	./build/out
 
@@ -32,3 +47,25 @@ time_compile: debug_compile
 
 clean:
 	rm -f build/*
+
+
+# Run through: patchdistance + coshalfangle
+lambda_cos: out
+	@for lambda in $(LAMBDA_LIST); do \
+		for coshalfangle in $(COS_LIST); do \
+			echo "lambda=$$lambda cos=$$coshalfangle"; \
+			out_dir=$(OUT_BASE)/lambda_$${lambda}_coshalfangle_$${coshalfangle}; \
+			mkdir -p $$out_dir; \
+			./build/out --patchdistance $$lambda --coshalfangle $$coshalfangle --outdir $$out_dir; \
+		done; \
+	done
+
+# Run through: temperature + density
+temp_density: out
+	@for temp in $(TEMPERATURES); do \
+        for rho in $(DENSITIES); do \
+            out_dir=$(OUT_BASE)/T_$${temp}_rho_$${rho}; \
+            mkdir -p $$out_dir; \
+            ./build/out --temperature $$temp --density $$rho --outdir $$out_dir; \
+        done; \
+    done
