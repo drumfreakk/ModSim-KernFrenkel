@@ -19,7 +19,7 @@
 #define NPATCHES 4
 
 /* Initialization variables */
-const int    mc_steps      = 10000000;
+const int    mc_steps      = 1e5;
 const int    output_steps  = 100;
 double density       = 0.8;
 double       delta_r       = 0.1; // Initial step size
@@ -29,7 +29,7 @@ double beta          = 50;
 // Starting condition, choose one of the 2 
 
 // Start from an fcc crystal
-const char*  init_filename = "../fcc/32.dat";
+const char*  init_filename = "../fcc/256.dat";
 
 // Start from an equilibrated snapshot
 //const char*  init_filename = "equilibrated_4.snap";
@@ -40,10 +40,10 @@ const double sigma = 1.0;
 const double epsilon = 1.0;
 
 // Kern Frenkel Patchy particle model parameters
-double patchdistance = 0.07; // Lambda, multiple of the diameter to which the path extends
+double patchdistance = 1.07; // Lambda, multiple of the diameter to which the path extends
 double coshalfangle = 0.92; // ~cos(pi/8) as a first try, some nice value for now
 
-static char output_dir[256] = "out";
+static char output_dir[128] = "out";
 
 /* Simulation variables */
 int    n_particles = 0;
@@ -205,7 +205,7 @@ void read_data(void){
 
 void write_snapshot(void){
 	int n,d;
-	char file_path[128];
+	char file_path[256];
 	sprintf(file_path, "%s/snapshot.snap", output_dir);
 	FILE* snapshot_fd = nice_fopen(file_path, "w");
 	if (snapshot_fd == NULL) return;
@@ -567,6 +567,9 @@ void run_simulation(){
         return;
     }
 
+	printf("\tNumber of particles: %i\n\tNPATCHES: %i\n\tTemperature: %lf\n\tDensity: %lf\n\t",
+	       n_particles, NPATCHES, 1.0/beta, density);
+
     set_density();
 
     //for(d = 0; d < NDIM; ++d) assert(r_cut <= 0.5 * box[d]);
@@ -584,7 +587,7 @@ void run_simulation(){
 
 	// Open the output file
 	// This way, it outputs all snapshots into a single file, which lets CVT load them all in one go
-    char buffer[128];
+    char buffer[256];
 	#if NDIM==2
 		char extension[6] = ".patch";
 	#elif NDIM==3
