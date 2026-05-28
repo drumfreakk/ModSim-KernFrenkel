@@ -8,7 +8,6 @@
 ***Current To Do list*** (**crystaline phases**)
 - Decide upon equilibration time or a observable that would indicate EQ time
 - Create order parameter analysis code that tells us what phase/unit cell we have, then graph that
------------------------------------------------------
 
 -----------------------------------------------------
 ***Current Achivements***: (**sucesfully simulated**)
