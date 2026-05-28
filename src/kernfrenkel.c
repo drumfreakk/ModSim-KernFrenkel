@@ -21,15 +21,17 @@
 /* Initialization variables */
 const int    mc_steps      = 1e5;
 const int    output_steps  = 100;
-double density       = 0.8;
+double       density       = 0.8; // Either use this or pressure depending on whether we're NPT or NVT
+double       pressure      = 0.1;  
 double       delta_r       = 0.1; // Initial step size
 double       delta_a       = 0.1; // Initial angle change size 
-double beta          = 50;
+double       delta_V       = 0.1; // Initial volume change size
+double       beta          = 50;
 
 // Starting condition, choose one of the 2 
 
 // Start from an fcc crystal
-const char*  init_filename = "../fcc/256.dat";
+const char*  init_filename = "../fcc/32.dat";
 
 // Start from an equilibrated snapshot
 //const char*  init_filename = "equilibrated_4.snap";
@@ -69,14 +71,19 @@ FILE* energy_fd = NULL;
 void   run_simulation(void);
 
 double particle_energy(int pid, bool print_bonds);
+double get_total_energy();
+
 int    move_particle(void);
 int    rotate_particle(void);
+int    change_volume(void);
 
 void   matrix_vector_product(double res[MAXDIM], const double matrix[MAXDIM][MAXDIM], const double vector[MAXDIM]);
 double dot_product(const double a[MAXDIM], const double b[MAXDIM]);
 
 void   generate_random_unit_quaternion(double rv[4]);
 void   set_rotation_matrix_from_director(int pid, const double d[4]);
+
+void   scale_volume(double ratio);
 
 void   read_data(void);
 void   write_data(void);
@@ -282,10 +289,22 @@ void classify_makefile_args(int argc, char* argv[]){
         }
 
         if (strcmp(arg, "--density") == 0){
+			#ifdef NPT
+			printf("Warning: Setting density while in the NPT ensemble\n");
+			#endif
             density = atof(argv[i + 1]);
             i++;
             continue;
         }
+
+		if (strcmp(arg, "--pressure") == 0){
+			#ifndef NPT
+			printf("Warning: Setting pressure while not in the NPT ensemble\n");
+			#endif
+			pressure = atof(argv[i + 1]);
+			i++;
+			continue;
+		}
 
         fprintf(stderr, "Unknown argument: %s\n", arg);
     }
@@ -305,6 +324,11 @@ void set_density(void){
     for(d = 0; d < NDIM; ++d) box[d] *= scale_factor;
 }
 
+double get_total_energy(){
+	double energy = 0.0;
+    for(int n = 0; n < n_particles; ++n) energy += particle_energy(n, false);
+	return energy*0.5;
+}
 
 double particle_energy(int pid, bool print_bonds){
     double particle_energy = 0.0;
@@ -437,7 +461,6 @@ double particle_energy(int pid, bool print_bonds){
     return particle_energy;
 }
 
-
 int move_particle(void){
     int rpid = n_particles * dsfmt_genrand();
 
@@ -541,6 +564,62 @@ int rotate_particle(void){
 	return 0;
 }
 
+// Scale the entire system by a length ratio
+void scale_volume(double ratio){
+	int n, d;
+	// Scale box size
+	for (d = 0; d < NDIM; d++) box[d] *= ratio;
+	
+	// Scale particle coordinates
+	for (n = 0; n < n_particles; n++){
+		for (d = 0; d < NDIM; d++) r[n][d] *= ratio;
+	}
+}
+
+int change_volume(void){
+	int d;
+
+	double energy_old = energy;
+
+	// Generate a random volume change
+	double V_old = 1.0;
+	for (d = 0; d < NDIM; d++) V_old *= box[d];
+
+	double V_new = V_old + delta_V * (2.0 * dsfmt_genrand() - 1);
+	
+	if (V_new <= 0.0) return 0;
+
+	// Scale the system
+	double length_ratio = cbrt(V_new / V_old);
+	scale_volume(length_ratio);
+
+	double energy_new = get_total_energy();
+
+	if (energy_new != INFINITY){
+		//accept
+		// The boltzmann factor is: exp(-beta (enew-eold + p (vnew-vold)) (vnew/vold)^N
+		double acceptance_rate = pow(V_new / V_old, n_particles) * 
+		                         exp(- beta * (energy_new-energy_old + pressure * (V_new - V_old))); 
+
+		// Check if we should accept the move. 
+		// The acceptance condition min(1, acceptance_rate) means that we should always accept a move 
+		// if acceptance_rate > 1
+		// Otherwise we accept it with a probability of acceptance_rate
+		// Since any number from dsfmt_genrand() < 1, this condition satisfies the acceptance condition
+		if (dsfmt_genrand() <= acceptance_rate) {
+			// Accept the move
+			energy = energy_new;
+			return 1;
+		}
+	}
+	
+	// Reject the move
+	scale_volume(1.0/length_ratio);
+	energy = energy_old;
+	
+	return 0;
+}
+
 // Set the (globally stored) rotation matrix of particle pid according to the rotation quaternion d
 void set_rotation_matrix_from_director(int pid, const double d[4]){
 	rot[pid][0][0] = d[0]*d[0] - d[1]*d[1] - d[2]*d[2] + d[3]*d[3];
@@ -567,22 +646,27 @@ void run_simulation(){
         return;
     }
 
-	printf("\tNumber of particles: %i\n\tNPATCHES: %i\n\tTemperature: %lf\n\tDensity: %lf\n\t",
-	       n_particles, NPATCHES, 1.0/beta, density);
-
+	printf("\tNumber of particles: %i\n\tNPATCHES: %i\n\tTemperature: %lf\n",
+	       n_particles, NPATCHES, 1.0/beta);
+	#ifdef NPT
+	printf("\tPressure: %lf\n", pressure);
+	#elif
+	printf("\tDensity: %lf\n", density);
+	#endif
+	
     set_density();
 
     //for(d = 0; d < NDIM; ++d) assert(r_cut <= 0.5 * box[d]);
-	energy = 0.0;
-    for(n = 0; n < n_particles; ++n) energy += particle_energy(n, false);
-    energy *= 0.5;
+	energy = get_total_energy();
 
 	assert(energy != INFINITY);
 
     int accepted_mov = 0;
 	int accepted_rot = 0;
+	int accepted_vol = 0;
 	int total_mov = 0;
 	int total_rot = 0;
+	int total_vol = 0;
 
 
 	// Open the output file
@@ -602,15 +686,28 @@ void run_simulation(){
 	energy_fd = nice_fopen(buffer, "w");
 	if (energy_fd == NULL) return;
 
+	double p_mov_rot = 2.0*n_particles;
+	#ifdef NPT
+	p_mov_rot += 1.0;
+	#endif
+	p_mov_rot = n_particles / p_mov_rot;
+
     for(step = 0; step < mc_steps; step++){
-        for(n = 0; n < n_particles; n++){
+    	for(n = 0; n < 2*n_particles+1; n++){
 			// Probabilistically choose whether to move or rotate a particle, to obey detailed balance
-			if (dsfmt_genrand() < 0.5){
+			double rand_num = dsfmt_genrand();
+			if (rand_num < p_mov_rot){
 				accepted_mov += move_particle();
 				total_mov++;
-			} else {
+			} else if (rand_num < 2.0*p_mov_rot) {
 				accepted_rot += rotate_particle();
 				total_rot++;
+			} else {
+				#ifndef NPT
+				printf("Something went wrong if you're seeing this :(\n");
+				#endif
+				accepted_vol +=  change_volume();
+				total_vol++;
 			}
         }
 
@@ -627,7 +724,14 @@ void run_simulation(){
 			if ((double)accepted_mov / total_mov > 0.55) delta_r /= 0.9;
 			if ((double)accepted_rot / total_rot < 0.45) delta_a *= 0.9;
 			if ((double)accepted_rot / total_rot > 0.55) delta_a /= 0.9;
-            
+
+			#ifdef NPT
+			if ((double)accepted_vol / total_vol < 0.45) delta_V *= 0.9;
+			if ((double)accepted_vol / total_vol > 0.55) delta_V /= 0.9;
+            accepted_vol = 0;
+			total_vol = 0;
+			#endif
+
     		accepted_mov = 0;
 			accepted_rot = 0;
 			total_mov = 0;
@@ -642,11 +746,13 @@ void run_simulation(){
 	fclose(output_fd);
 	fclose(energy_fd);
 
-	double rechecked_energy = 0.0;
-    for(n = 0; n < n_particles; ++n) rechecked_energy += particle_energy(n, true);
-    rechecked_energy *= 0.5;
-
-	printf("Done simulating!\007\nFinal energy: %lf (should be %lf)\n", energy, rechecked_energy);
+	printf("Done simulating!\007\n");
+	printf("Final energy: %lf (should be %lf)\n", energy, get_total_energy());
+	#ifdef NPT
+	double V = 1.0;
+	for (n = 0; n < NDIM; n++) V *= box[n];
+	printf("Final volume: %lf\n", V);
+	#endif
 }
 
 
