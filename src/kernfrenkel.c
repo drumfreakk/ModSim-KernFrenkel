@@ -16,10 +16,10 @@
 #define MAXDIM 3 // Maximum number of dimensions, to make the output files work nicely
 #define N 2000
 
-#define NPATCHES 3
+#define NPATCHES 4
 
 /* Initialization variables */
-const int    mc_steps      = 100000;
+const int    mc_steps      = 10000000;
 const int    output_steps  = 100;
 double density       = 0.8;
 double       delta_r       = 0.1; // Initial step size
@@ -40,8 +40,8 @@ const double sigma = 1.0;
 const double epsilon = 1.0;
 
 // Kern Frenkel Patchy particle model parameters
-double patchdistance = 1.13; // Lambda, multiple of the diameter to which the path extends
-double coshalfangle = 0.9; // ~cos(pi/8) as a first try, some nice value for now
+double patchdistance = 0.07; // Lambda, multiple of the diameter to which the path extends
+double coshalfangle = 0.92; // ~cos(pi/8) as a first try, some nice value for now
 
 static char output_dir[256] = "out";
 

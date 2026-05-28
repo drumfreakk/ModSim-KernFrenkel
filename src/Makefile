@@ -9,13 +9,14 @@ OUT_BASE ?= out
 COS_LIST ?= 0.97 0.98 0.99
 LAMBDA_LIST ?= 1.02 1.12 1.22 1.32 1.42 1.52 1.62 1.72 1.82 1.92 2.02
 
-# LAMBDA_LIST ?= 1.05 1.10 1.15
-# COS_LIST ?= 0.85 0.90 0.95
+# # Random place holder currently
+# TEMPERATURES ?= 0.02 0.04
+# DENSITIES ?= 0.3 0.5 0.7
 
-# Random place holder currently
-TEMPERATURES ?= 0.02 0.03 0.04
-DENSITIES ?= 0.7 0.8 0.9
 
+# F.Romano tetrahedral structure, delta 0.07
+TEMPERATURES ?= 0.1 0.2
+DENSITIES ?= 0.1 0.5 0.72
 
 run: out
 	./build/out
