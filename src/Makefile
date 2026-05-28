@@ -18,6 +18,10 @@ LAMBDA_LIST ?= 1.02 1.12 1.22 1.32 1.42 1.52 1.62 1.72 1.82 1.92 2.02
 TEMPERATURES ?= 0.2
 DENSITIES ?= 0.1 0.5 0.72
 
+# # F.Romano tetrahedral structure, delta 0.07
+# TEMPERATURES ?= 0.1
+# DENSITIES ?= 0.9
+
 run: out
 	./build/out
 

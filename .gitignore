@@ -67,12 +67,13 @@ dkms.conf
 *.bak
 *.bak.*
 
-!fcc/*
-
 *.ptc
 *.patch
 
 *.snap
+
+!fcc/*
+!final_output/*
 
 # my random folder and other added files
 MateoRandom/
