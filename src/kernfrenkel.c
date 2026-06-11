@@ -18,24 +18,24 @@
 
 #define NPATCHES 4
 
+#define NPT
+
+#define ROTATIONONLY
+
 /* Initialization variables */
 const int    mc_steps      = 1e5;
 const int    output_steps  = 100;
-double       density       = 0.8; // Either use this or pressure depending on whether we're NPT or NVT
-double       pressure      = 0.1;  
+double       density       = 0.7; // Either use this or pressure depending on whether we're NPT or NVT
+double       pressure      = 0.2;  
 double       delta_r       = 0.1; // Initial step size
 double       delta_a       = 0.1; // Initial angle change size 
 double       delta_V       = 0.1; // Initial volume change size
-double       beta          = 50;
+double       beta          = 20;
 
 // Starting condition, choose one of the 2 
-
-// Start from an fcc crystal
-const char*  init_filename = "../fcc/32.dat";
-
-// Start from an equilibrated snapshot
-//const char*  init_filename = "equilibrated_4.snap";
-//#define LOAD_SNAPSHOT
+const char*  init_filename = "../bcc/54.dat"; // Start from a (rotationless) crystal structure
+//const char*  init_filename = "out/snapshot.snap"; // Start from an snapshopt
+#define LOAD_SNAPSHOT
 
 // Fix the diameter at 1.0, add a variable to control that
 const double sigma = 1.0;
@@ -43,7 +43,7 @@ const double epsilon = 1.0;
 
 // Kern Frenkel Patchy particle model parameters
 double patchdistance = 1.07; // Lambda, multiple of the diameter to which the path extends
-double coshalfangle = 0.99; // ~cos(pi/8) as a first try, some nice value for now
+double coshalfangle = 0.92; // ~cos(pi/8) as a first try, some nice value for now
 
 static char output_dir[128] = "out";
 
@@ -704,8 +704,13 @@ void run_simulation(){
 			// Probabilistically choose whether to move or rotate a particle, to obey detailed balance
 			double rand_num = dsfmt_genrand();
 			if (rand_num < p_mov_rot){
+				#ifdef ROTATIONONLY
+				accepted_rot += rotate_particle();
+				total_rot++;
+				#else
 				accepted_mov += move_particle();
 				total_mov++;
+				#endif
 			} else if (rand_num < 2.0*p_mov_rot) {
 				accepted_rot += rotate_particle();
 				total_rot++;
