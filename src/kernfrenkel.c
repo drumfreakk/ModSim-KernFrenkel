@@ -30,7 +30,7 @@ double       pressure      = 0.2;
 double       delta_r       = 0.1; // Initial step size
 double       delta_a       = 0.1; // Initial angle change size 
 double       delta_V       = 0.1; // Initial volume change size
-double       beta          = 20;
+double       beta          = 4;
 
 // Starting condition, choose one of the 2 
 //const char*  init_filename = "../bcc/54.dat"; // Start from a (rotationless) crystal structure
@@ -96,7 +96,7 @@ void   init_rotations(void);
 void   check_SBPP(void);
 
 FILE*  nice_fopen(const char* path, const char* mode);
-void   close_fds(int sig);
+void   handle_sigint(int sig);
 
 void   print_vector(double vec[], int len);
 void   print_matrix(double mat[MAXDIM][MAXDIM]);
@@ -109,7 +109,9 @@ FILE* nice_fopen(const char* path, const char* mode){
 	return fd;
 }
 
-void close_fds(int sig){
+void handle_sigint(int sig){
+	write_snapshot();
+
 	// Ensure the output files are still properly written to if the program is terminated
 	if (output_fd != NULL) fclose(output_fd);
 	if (energy_fd != NULL) fclose(energy_fd);
@@ -675,7 +677,9 @@ void run_simulation(){
 	#endif
 	fclose(settings_fd);
 
+	#ifndef NPT
     set_density();
+	#endif
 
     //for(d = 0; d < NDIM; ++d) assert(r_cut <= 0.5 * box[d]);
 	energy = get_total_energy();
@@ -798,7 +802,7 @@ int main(int argc, char* argv[]){
 	settings_fd = nice_fopen(buffer, "w");
 	fprintf(settings_fd, "SEED: %zu\n", seed);
 	
-	signal(SIGINT, *close_fds);
+	signal(SIGINT, *handle_sigint);
 
 	run_simulation();
 
