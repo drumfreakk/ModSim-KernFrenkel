@@ -55,6 +55,20 @@ Mateos CVT command:
 
 ./Visualisation/CVT/build-mac-release/cvt ModSim-KernFrenkel/src/out/T_0.2_rho_0.5/coords___.ptc
 
-./Visualisation/CVT/build-mac-release/cvt ModSim-KernFrenkel/src/out/T_0.2_rho_0.72/coords___.ptc
+./Visualisation/CVT/build-mac-release/cvt ModSim-KernFrenkel/src/out/T_0.12_rho_0.75/coords___.ptc
 
 output_4patch_256_s1e6/*
+
+
+
+
+
+
+
+
+todo
+ - BCC lattice (rotiations only until EQ), then start from that and see if it melts with the Params in the paper. 
+ 
+ Then we will know if we are correct
+
+./Visualisation/CVT/build-mac-release/cvt ModSim-KernFrenkel/src/out/coords___.ptc

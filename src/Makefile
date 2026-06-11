@@ -11,16 +11,18 @@ OUT_BASE ?= out
 COS_LIST ?= 0.97 0.98 0.99
 LAMBDA_LIST ?= 1.02 1.12 1.22 1.32 1.42 1.52 1.62 1.72 1.82 1.92 2.02
 
-# # Random place holder currently
-# TEMPERATURES ?= 0.02 0.04
-# DENSITIES ?= 0.3 0.5 0.7
-
-
-# F.Romano tetrahedral structure, delta 0.07
-TEMPERATURES ?= 0.01
-DENSITIES ?= 0.1 0.5 0.72
+# # F.Romano tetrahedral structure, delta 0.07
+# TEMPERATURES ?= 0.01
+# DENSITIES ?= 0.1 0.5 0.72
 
 PRESSURES ?= 10
+
+
+# current setup for finding phase diagrams
+TEMPERATURES ?= 0.12
+DENSITIES ?= 0.75
+
+
 
 run: out
 	./build/out
