@@ -72,16 +72,49 @@ void bcc(double l, int N, FILE* output){
     }
 }
 
+void dc(double l, int N, FILE* output){
+    fprintf(output, "%i\n", N*N*N*8);
+    fprintf(output, "%lf\t%lf\n", 0.0, N * 4*l);
+    fprintf(output, "%lf\t%lf\n", 0.0, N * 4*l);
+    fprintf(output, "%lf\t%lf\n", 0.0, N * 4*l);
+
+    for (int x = 0; x < N; x++){
+        for (int y = 0; y < N; y++){
+            for (int z = 0; z < N; z++){
+				fprintf(output, "%lf\t%lf\t%lf\t%lf\n", l*0+4*x*l, l*0+4*y*l, l*0+4*z*l, D);
+				fprintf(output, "%lf\t%lf\t%lf\t%lf\n", l*0+4*x*l, l*2+4*y*l, l*2+4*z*l, D);
+				fprintf(output, "%lf\t%lf\t%lf\t%lf\n", l*2+4*x*l, l*0+4*y*l, l*2+4*z*l, D);
+				fprintf(output, "%lf\t%lf\t%lf\t%lf\n", l*2+4*x*l, l*2+4*y*l, l*0+4*z*l, D);
+				fprintf(output, "%lf\t%lf\t%lf\t%lf\n", l*3+4*x*l, l*3+4*y*l, l*3+4*z*l, D);
+				fprintf(output, "%lf\t%lf\t%lf\t%lf\n", l*3+4*x*l, l*1+4*y*l, l*1+4*z*l, D);
+				fprintf(output, "%lf\t%lf\t%lf\t%lf\n", l*1+4*x*l, l*3+4*y*l, l*1+4*z*l, D);
+				fprintf(output, "%lf\t%lf\t%lf\t%lf\n", l*1+4*x*l, l*1+4*y*l, l*3+4*z*l, D);
+			}
+		}		
+	}
+
+//    for (int x = 0; x < N; x++){
+//        for (int y = 0; y < N; y++){
+//            for (int z = 0; z < N; z++){
+//				if ((x%2 == y%2 && y%2 == z%2) || (x+y+z)%4 == 0 || (x+y+z)%4==1)
+//					fprintf(output, "%lf\t%lf\t%lf\t%lf\n", x*4*l, y*4*l, z*4*l, D);
+//			}
+//        }
+//    }
+	printf("%i\n", N*N*N*8);
+}
+
 int main(){
     FILE* output;
-	output = fopen("../bcc/bcc.dat", "w");
-	bcc(1.0, 10, output);
 
+	output = fopen("../dc/dc.dat", "w");
+	dc(0.7, 7, output);
+//	output = fopen("../bcc/bcc.dat", "w");
+//	bcc(1.0, 10, output);
 //	output = fopen("cubic.xyz", "w");
-//    cubic(1.0, 5, output);    
-//    
-//    output = fopen("fcc_6.xyz", "w");
-//    fcc(1.0/sqrt(2.0), 4, output);
+//	cubic(1.0, 5, output);    
+//	output = fopen("fcc_6.xyz", "w");
+//	fcc(1.0/sqrt(2.0), 4, output);
     
 	fclose(output);
 

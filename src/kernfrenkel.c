@@ -26,15 +26,15 @@
 const int    mc_steps      = 1e5;
 const int    output_steps  = 100;
 double       density       = 0.7; // Either use this or pressure depending on whether we're NPT or NVT
-double       pressure      = 0.2;  
+double       pressure      = 0.01;  
 double       delta_r       = 0.1; // Initial step size
 double       delta_a       = 0.1; // Initial angle change size 
 double       delta_V       = 0.1; // Initial volume change size
-double       beta          = 4;
+double       beta          = 10;
 
 // Starting condition, choose one of the 2 
-//const char*  init_filename = "../bcc/54.dat"; // Start from a (rotationless) crystal structure
-const char*  init_filename = "../bcc/54_rot.snap"; // Start from an snapshopt
+//const char*  init_filename = "../dc/dc.dat"; // Start from a (rotationless) crystal structure
+const char*  init_filename = "../dc/64_rot.snap"; // Start from an snapshopt
 
 bool from_snapshot = false;
 
