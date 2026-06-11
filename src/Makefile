@@ -39,6 +39,10 @@ prod: clean build_compile
 
 time: time_compile
 
+generate_coords: filename:=generate_coordinates
+generate_coords: level := 3
+generate_coords: run 
+
 debug_compile: CFLAGS += -DVERBOSE
 debug_compile: level := g
 debug_compile: run

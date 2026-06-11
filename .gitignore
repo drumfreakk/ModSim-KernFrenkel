@@ -73,6 +73,7 @@ dkms.conf
 *.snap
 
 !fcc/*
+!bcc/*
 !final_output/*
 
 # my random folder and other added files
@@ -80,3 +81,5 @@ MateoRandom/
 .DS_Store
 .vscode
 sbpp_scan.py
+
+*.txt
