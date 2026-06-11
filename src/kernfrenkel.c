@@ -64,9 +64,9 @@ double energy = 0.0;
 int particle_bonds[N][NPATCHES][NPATCHES] = {{{-1}}}; // for each particle, stores -1 if patch unoccupied or the pid of the partner particle at the N_partner_patch location
 
 // FD to output all particle data to
-FILE* output_fd = NULL;
-FILE* energy_fd = NULL;
-
+FILE* output_fd   = NULL;
+FILE* energy_fd   = NULL;
+FILE* settings_fd = NULL;
 
 void   run_simulation(void);
 
@@ -110,6 +110,7 @@ void close_fds(int sig){
 	// Ensure the output files are still properly written to if the program is terminated
 	if (output_fd != NULL) fclose(output_fd);
 	if (energy_fd != NULL) fclose(energy_fd);
+	if (settings_fd != NULL) fclose(settings_fd);
 
 	raise(SIGTERM);
 }
@@ -648,12 +649,17 @@ void run_simulation(){
 
 	printf("\tNumber of particles: %i\n\tNPATCHES: %i\n\tTemperature: %lf\n",
 	       n_particles, NPATCHES, 1.0/beta);
+	fprintf(settings_fd, "Number of particles: %i\n\tNPATCHES: %i\n\tTemperature: %lf\n",
+	        n_particles, NPATCHES, 1.0/beta);
 	#ifdef NPT
 	printf("\tPressure: %lf\n", pressure);
+	fprintf(settings_fd, "Pressure: %lf\n", pressure);
 	#else
 	printf("\tDensity: %lf\n", density);
+	fprintf(settings_fd, "Density: %lf\n", density);
 	#endif
-	
+	fclose(settings_fd);
+
     set_density();
 
     //for(d = 0; d < NDIM; ++d) assert(r_cut <= 0.5 * box[d]);
@@ -766,6 +772,11 @@ int main(int argc, char* argv[]){
 
 	classify_makefile_args(argc, argv);
 	check_SBPP();
+
+    char buffer[256];
+	sprintf(buffer, "%s/settings.txt", output_dir);
+	settings_fd = nice_fopen(buffer, "w");
+	fprintf(settings_fd, "SEED: %zu\n", seed);
 	
 	signal(SIGINT, *close_fds);
 
