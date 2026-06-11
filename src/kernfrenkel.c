@@ -650,7 +650,7 @@ void run_simulation(){
 	       n_particles, NPATCHES, 1.0/beta);
 	#ifdef NPT
 	printf("\tPressure: %lf\n", pressure);
-	#elif
+	#else
 	printf("\tDensity: %lf\n", density);
 	#endif
 	
