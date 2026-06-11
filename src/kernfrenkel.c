@@ -42,8 +42,8 @@ const double sigma = 1.0;
 const double epsilon = 1.0;
 
 // Kern Frenkel Patchy particle model parameters
-double patchdistance = 1.07; // Lambda, multiple of the diameter to which the path extends
-double coshalfangle = 0.92; // ~cos(pi/8) as a first try, some nice value for now
+double patchdistance = 2.0; // Lambda, multiple of the diameter to which the path extends
+double coshalfangle = 0.5; // ~cos(pi/8) as a first try, some nice value for now
 
 static char output_dir[128] = "out";
 
@@ -122,6 +122,7 @@ void check_SBPP(void) { // check if we are in Single Bond Per Patch condition, s
 	if (sin_theta_max >= threshold) {
 		printf("Error: SBPP is not fulfilled\n");
 	}
+	exit(1);
 }
 
 
