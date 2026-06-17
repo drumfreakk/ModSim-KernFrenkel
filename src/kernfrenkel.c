@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "mt19937.h"
+// #include "progressBar.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -14,7 +15,7 @@
 
 #define NDIM 3   // The actual number of dimensions used in the simulation
 #define MAXDIM 3 // Maximum number of dimensions, to make the output files work nicely
-#define N 2000
+#define N 3000
 
 #define NPATCHES 4
 
@@ -23,7 +24,7 @@
 //#define ROTATIONONLY
 
 /* Initialization variables */
-const int    mc_steps      = 1e5;
+const int    mc_steps      = 1e4;
 const int    output_steps  = 100;
 double       density       = 0.7; // Either use this or pressure depending on whether we're NPT or NVT
 double       pressure      = 0.1;  
@@ -102,7 +103,31 @@ void   handle_sigint(int sig);
 void   print_vector(double vec[], int len);
 void   print_matrix(double mat[MAXDIM][MAXDIM]);
 
-//TODO: generate bonds
+
+
+
+
+int MAX_PROGRESS = 100;
+int BAR_LENGTH = 0;  // Length of Header
+int num_items = mc_steps;
+
+void initialiseProgressBar(char left, char right, char fill) {
+
+  printf("%c", left);
+  for (int i = 0; i < BAR_LENGTH; i ++) {
+    printf("%c", fill);
+  }
+
+  /** Print the right first (end of line) and then again the left (start of line)
+   * as the \r will be placed over it and rewrite from there resulting in one
+   * character less
+   */
+  printf("%c\r%c", right, left);
+}
+
+
+
+
 
 FILE* nice_fopen(const char* path, const char* mode){
 	FILE* fd = fopen(path, mode);
@@ -718,7 +743,29 @@ void run_simulation(){
 	#endif
 	p_mov_rot = n_particles / p_mov_rot;
 
+	// pre-start of progress bar code
+	// Header for the progress bar
+	char* header = "\n|<---------------- Progress Bar ---------------->|\n";
+	printf("%s", header);
+	BAR_LENGTH = strlen(header) - 3; // Account for newline and right character characters
+
+	initialiseProgressBar('[', ']', '.');
+	int previous_number = 0;	
     for(step = 0; step < mc_steps; step++){
+
+		// start of progress bar code
+
+		double progress = ((double)step / (double) mc_steps) * 50.0;
+
+		int current_number = progress;
+		if (current_number > previous_number){
+			// printf("%li", step);
+			printf("%s", "#"); // Can put any character here
+			previous_number = current_number;
+			}
+		fflush(stdout);
+		// end of progress bar code
+
     	for(n = 0; n < 2*n_particles+1; n++){
 			// Probabilistically choose whether to move or rotate a particle, to obey detailed balance
 			double rand_num = dsfmt_genrand();
@@ -777,7 +824,7 @@ void run_simulation(){
 	fclose(output_fd);
 	fclose(energy_fd);
 
-	printf("Done simulating!\007\n");
+	printf("\n\nDone simulating!\007\n");
 	printf("Final energy: %lf (should be %lf)\n", energy, get_total_energy());
 	#ifdef NPT
 	double V = 1.0;
@@ -785,6 +832,50 @@ void run_simulation(){
 	printf("Final volume: %lf\n", V);
 	#endif
 }
+
+
+
+
+// void initialiseProgressBar(char left, char right, char fill) {
+
+//   printf("%c", left);
+//   for (int i = 0; i < BAR_LENGTH; i ++) {
+//     printf("%c", fill);
+//   }
+
+//   /** Print the right first (end of line) and then again the left (start of line)
+//    * as the \r will be placed over it and rewrite from there resulting in one
+//    * character less
+//    */
+//   printf("%c\r%c", right, left);
+// }
+
+
+
+
+
+// void drawProgressBar(char c) {
+
+//   // Print according to BAR_LENGTH
+//   for (int i = 0; i < 100; i ++) {
+
+
+//     double progress = (i / BAR_LENGTH) % (MAX_PROGRESS * BAR_LENGTH * num_items);
+// 	double progress_normalised = progress % 100;
+//     if (progress_normalised = 0) {
+//       printf("%c", c);
+//     }
+//     // Redraw the stdout stream to show progressing bar
+//     fflush(stdout);
+//   }
+// }
+
+
+
+
+
+
+
 
 
 int main(int argc, char* argv[]){
