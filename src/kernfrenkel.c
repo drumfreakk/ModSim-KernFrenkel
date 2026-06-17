@@ -19,14 +19,14 @@
 
 #define NPATCHES 3
 
-#define NPT
+// #define NPT
 
 // #define INITROTATIONS
 int init_steps = 1e5;
 //#define ROTATIONONLY
 
 /* Initialization variables */
-const int    mc_steps      = 1e4;
+const int    mc_steps      = 2e6;
 const int    output_steps  = 100;
 double       density       = 0.7; // Either use this or pressure depending on whether we're NPT or NVT
 double       pressure      = 10.0;  
