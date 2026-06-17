@@ -21,7 +21,7 @@
 
 #define NPT
 
-#define INITROTATIONS
+// #define INITROTATIONS
 int init_steps = 1e5;
 //#define ROTATIONONLY
 
