@@ -9,6 +9,11 @@
 - Decide upon equilibration time or a observable that would indicate EQ time
 - Create order parameter analysis code that tells us what phase/unit cell we have, then graph that
 
+- Pre-rotate different crystal structures (and potentially let them move at high P, eg. in the case of HCP otherwise it doesn't get the densest possible structure)
+- For a set of different temperatures and pressures/densities, run the MC starting from the different crystals
+- Make a plot of it
+
+
 -----------------------------------------------------
 ***Current Achivements***: (**sucesfully simulated**)
 - Corretly simulate trihedral or tetrahedral KF patchy particles

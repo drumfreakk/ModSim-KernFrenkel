@@ -21,13 +21,15 @@
 
 #define NPT
 
-#define ROTATIONONLY
+#define INITROTATIONS
+int init_steps = 1e5;
+//#define ROTATIONONLY
 
 /* Initialization variables */
 const int    mc_steps      = 1e4;
 const int    output_steps  = 100;
 double       density       = 0.7; // Either use this or pressure depending on whether we're NPT or NVT
-double       pressure      = 1.0;  
+double       pressure      = 10.0;  
 double       delta_r       = 0.1; // Initial step size
 double       delta_a       = 0.1; // Initial angle change size 
 double       delta_V       = 0.1; // Initial volume change size
@@ -710,7 +712,7 @@ void run_simulation(){
 	fprintf(settings_fd, "\tRotation Only\n");
 	#endif
 	fclose(settings_fd);
-
+	
 	#ifndef NPT
     set_density();
 	#endif
@@ -759,7 +761,30 @@ void run_simulation(){
 
 	initialiseProgressBar('[', ']', '.');
 	int previous_number = 0;	
-    for(step = 0; step < mc_steps; step++){
+    
+	#ifdef INITROTATIONS
+	for(step = 0; step < init_steps; step++){
+    	for(n = 0; n < 2*n_particles+1; n++){
+			// Probabilistically choose whether to move or rotate a particle, to obey detailed balance
+			double rand_num = dsfmt_genrand();
+			if (rand_num < p_mov_rot){
+				accepted_rot += rotate_particle();
+				total_mov++;
+			} else if (rand_num < 2.0*p_mov_rot) {
+				accepted_rot += rotate_particle();
+				total_rot++;
+			} else {
+				#ifndef NPT
+				printf("Something went wrong if you're seeing this :(\n");
+				#endif
+				accepted_vol +=  change_volume();
+				total_vol++;
+			}
+        }
+	}
+	#endif
+
+	for(step = 0; step < mc_steps; step++){
 
 		// start of progress bar code
 
