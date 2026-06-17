@@ -129,7 +129,7 @@ int main(){
     FILE* output;
 
 	output=fopen("../hcp/hcp.dat", "w");
-	hcp(0.63, 8, output);
+	hcp(0.6, 3, output);
 //	output = fopen("../dc/dc.dat", "w");
 //	dc(0.7, 7, output);
 //	output = fopen("../bcc/bcc.dat", "w");

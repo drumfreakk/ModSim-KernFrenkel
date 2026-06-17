@@ -17,26 +17,23 @@
 #define MAXDIM 3 // Maximum number of dimensions, to make the output files work nicely
 #define N 3000
 
-#define NPATCHES 4
+#define NPATCHES 3
 
 #define NPT
 
-//#define ROTATIONONLY
+#define ROTATIONONLY
 
 /* Initialization variables */
-const int    mc_steps      = 1e4;
+const int    mc_steps      = 1e5;
 const int    output_steps  = 100;
 double       density       = 0.7; // Either use this or pressure depending on whether we're NPT or NVT
-double       pressure      = 0.1;  
+double       pressure      = 1.0;  
 double       delta_r       = 0.1; // Initial step size
 double       delta_a       = 0.1; // Initial angle change size 
 double       delta_V       = 0.1; // Initial volume change size
 double       beta          = 10;
 
-// Starting condition, choose one of the 2 
-//const char*  init_filename = "../dc/dc.dat"; // Start from a (rotationless) crystal structure
-const char*  init_filename = "../hcp/hcp.dat";
-//const char*  init_filename = "../dc/64_rot.snap"; // Start from an snapshopt
+static char  init_filename[128] = "../hcp/252_rot.snap";
 
 bool from_snapshot = false;
 
@@ -46,8 +43,8 @@ const double sigma = 1.0;
 const double epsilon = 1.0;
 
 // Kern Frenkel Patchy particle model parameters
-double patchdistance = 1.07; // Lambda, multiple of the diameter to which the path extends
-double coshalfangle = 0.92; // ~cos(pi/8) as a first try, some nice value for now
+double patchdistance = 1.3; // Lambda, multiple of the diameter to which the path extends
+double coshalfangle = 0.99; // ~cos(pi/8) as a first try, some nice value for now
 
 static char output_dir[128] = "out";
 
@@ -304,6 +301,14 @@ void classify_makefile_args(int argc, char* argv[]){
 
         if (strcmp(arg, "--outdir") == 0){
             sprintf(output_dir, "%s", argv[i + 1]);
+            i++;
+            continue;
+        }
+        
+		if (strcmp(arg, "--initfile") == 0){
+	printf("Got here!\n");
+            sprintf(init_filename, "%s", argv[i + 1]);
+	printf("Got here!\n");
             i++;
             continue;
         }
@@ -690,16 +695,20 @@ void run_simulation(){
         return;
     }
 
-	printf("\tNumber of particles: %i\n\tNPATCHES: %i\n\tTemperature: %lf\n",
-	       n_particles, NPATCHES, 1.0/beta);
-	fprintf(settings_fd, "Number of particles: %i\n\tNPATCHES: %i\n\tTemperature: %lf\n",
-	        n_particles, NPATCHES, 1.0/beta);
+	printf("\tInit filename: %s\n\tNumber of particles: %i\n\tNPATCHES: %i\n\tTemperature: %lf\n",
+	       init_filename, n_particles, NPATCHES, 1.0/beta);
+	fprintf(settings_fd, "\tInit filename: %s\n\tNumber of particles: %i\n\tNPATCHES: %i\n\tTemperature: %lf\n",
+	        init_filename, n_particles, NPATCHES, 1.0/beta);
 	#ifdef NPT
 	printf("\tPressure: %lf\n", pressure);
-	fprintf(settings_fd, "Pressure: %lf\n", pressure);
+	fprintf(settings_fd, "\tPressure: %lf\n", pressure);
 	#else
 	printf("\tDensity: %lf\n", density);
 	fprintf(settings_fd, "Density: %lf\n", density);
+	#endif
+	#ifdef ROTATIONONLY
+	printf("\tRotation Only\n");
+	fprintf(settings_fd, "\tRotation Only\n");
 	#endif
 	fclose(settings_fd);
 
@@ -833,51 +842,6 @@ void run_simulation(){
 	#endif
 }
 
-
-
-
-// void initialiseProgressBar(char left, char right, char fill) {
-
-//   printf("%c", left);
-//   for (int i = 0; i < BAR_LENGTH; i ++) {
-//     printf("%c", fill);
-//   }
-
-//   /** Print the right first (end of line) and then again the left (start of line)
-//    * as the \r will be placed over it and rewrite from there resulting in one
-//    * character less
-//    */
-//   printf("%c\r%c", right, left);
-// }
-
-
-
-
-
-// void drawProgressBar(char c) {
-
-//   // Print according to BAR_LENGTH
-//   for (int i = 0; i < 100; i ++) {
-
-
-//     double progress = (i / BAR_LENGTH) % (MAX_PROGRESS * BAR_LENGTH * num_items);
-// 	double progress_normalised = progress % 100;
-//     if (progress_normalised = 0) {
-//       printf("%c", c);
-//     }
-//     // Redraw the stdout stream to show progressing bar
-//     fflush(stdout);
-//   }
-// }
-
-
-
-
-
-
-
-
-
 int main(int argc, char* argv[]){
 	size_t seed = time(NULL);
     dsfmt_seed(seed);
@@ -888,8 +852,8 @@ int main(int argc, char* argv[]){
 
 	classify_makefile_args(argc, argv);
 	check_SBPP();
-
-    char buffer[256];
+    
+	char buffer[256];
 	sprintf(buffer, "%s/settings.txt", output_dir);
 	settings_fd = nice_fopen(buffer, "w");
 	fprintf(settings_fd, "SEED: %zu\n", seed);
