@@ -24,7 +24,7 @@
 #define ROTATIONONLY
 
 /* Initialization variables */
-const int    mc_steps      = 1e5;
+const int    mc_steps      = 1e4;
 const int    output_steps  = 100;
 double       density       = 0.7; // Either use this or pressure depending on whether we're NPT or NVT
 double       pressure      = 1.0;  
@@ -120,6 +120,7 @@ void initialiseProgressBar(char left, char right, char fill) {
    * character less
    */
   printf("%c\r%c", right, left);
+  fflush(stdout);
 }
 
 
@@ -306,9 +307,7 @@ void classify_makefile_args(int argc, char* argv[]){
         }
         
 		if (strcmp(arg, "--initfile") == 0){
-	printf("Got here!\n");
             sprintf(init_filename, "%s", argv[i + 1]);
-	printf("Got here!\n");
             i++;
             continue;
         }
@@ -771,8 +770,8 @@ void run_simulation(){
 			// printf("%li", step);
 			printf("%s", "#"); // Can put any character here
 			previous_number = current_number;
-			}
-		fflush(stdout);
+			fflush(stdout);
+		}
 		// end of progress bar code
 
     	for(n = 0; n < 2*n_particles+1; n++){
