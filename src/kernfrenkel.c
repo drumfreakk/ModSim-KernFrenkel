@@ -21,22 +21,25 @@
 
 #define NPT
 
-// #define ROTATIONONLY
+//#define ROTATIONONLY
 
 /* Initialization variables */
 const int    mc_steps      = 1e4;
 const int    output_steps  = 100;
 double       density       = 0.7; // Either use this or pressure depending on whether we're NPT or NVT
-double       pressure      = 0.2;  
+double       pressure      = 0.1;  
 double       delta_r       = 0.1; // Initial step size
 double       delta_a       = 0.1; // Initial angle change size 
 double       delta_V       = 0.1; // Initial volume change size
-double       beta          = 20;
+double       beta          = 10;
 
 // Starting condition, choose one of the 2 
-const char*  init_filename = "../bcc/54.dat"; // Start from a (rotationless) crystal structure
-//const char*  init_filename = "out/snapshot.snap"; // Start from an snapshopt
-// #define LOAD_SNAPSHOT
+//const char*  init_filename = "../dc/dc.dat"; // Start from a (rotationless) crystal structure
+const char*  init_filename = "../hcp/hcp.dat";
+//const char*  init_filename = "../dc/64_rot.snap"; // Start from an snapshopt
+
+bool from_snapshot = false;
+
 
 // Fix the diameter at 1.0, add a variable to control that
 const double sigma = 1.0;
@@ -86,6 +89,7 @@ void   set_rotation_matrix_from_director(int pid, const double d[4]);
 
 void   scale_volume(double ratio);
 
+int    filetype(const char *str, const char *suffix);
 void   read_data(void);
 void   write_data(void);
 void   write_snapshot(void);
@@ -94,7 +98,7 @@ void   init_rotations(void);
 void   check_SBPP(void);
 
 FILE*  nice_fopen(const char* path, const char* mode);
-void   close_fds(int sig);
+void   handle_sigint(int sig);
 
 void   print_vector(double vec[], int len);
 void   print_matrix(double mat[MAXDIM][MAXDIM]);
@@ -131,7 +135,9 @@ FILE* nice_fopen(const char* path, const char* mode){
 	return fd;
 }
 
-void close_fds(int sig){
+void handle_sigint(int sig){
+	write_snapshot();
+
 	// Ensure the output files are still properly written to if the program is terminated
 	if (output_fd != NULL) fclose(output_fd);
 	if (energy_fd != NULL) fclose(energy_fd);
@@ -152,7 +158,7 @@ void check_SBPP(void) { // check if we are in Single Bond Per Patch condition, s
 
 
 void init_rotations(void) {
-#ifndef LOAD_SNAPSHOT
+	if (from_snapshot) return;
 	// Initialise all rotation matrices as identity matrices
 	int n,i,j;
 	for (n = 0; n < n_particles; n++){
@@ -162,7 +168,6 @@ void init_rotations(void) {
 		for (i = 0; i < 3; i++) directors[n][i] = 0.0;
 		directors[n][3] = 1.0;
 	}
-#endif
 }
 
 void matrix_vector_product(double res[MAXDIM], const double matrix[MAXDIM][MAXDIM], const double vector[MAXDIM]){
@@ -202,13 +207,22 @@ void print_matrix(double mat[MAXDIM][MAXDIM]){
 	printf("}\n");
 }
 
+int filetype(const char *str, const char *suffix){
+	if (!str || !suffix) return 0;
+	size_t lenstr = strlen(str);
+	size_t lensuffix = strlen(suffix);
+	if (lensuffix >  lenstr) return 0;
+	return strncmp(str + lenstr - lensuffix, suffix, lensuffix) == 0;
+}
+
 void read_data(void){
     FILE* fp = nice_fopen(init_filename, "r");
     int n, d;
     double dmin,dmax, diameter;
     fscanf(fp, "%d\n", &n_particles);
 
-	#ifdef LOAD_SNAPSHOT
+	if (filetype(init_filename, ".snap")) {
+		from_snapshot = true;
 		for(d = 0; d < MAXDIM; ++d){
 			fscanf(fp, "%lf\t", &dmax);
 			box[d] = fabs(dmax);
@@ -219,7 +233,8 @@ void read_data(void){
 			for(d = 0; d < 4; d++) fscanf(fp, "%lf\t", &directors[n][d]);
 			set_rotation_matrix_from_director(n, directors[n]);
 		}
-	#else
+	}
+	else if(filetype(init_filename, ".dat")){
 		for(d = 0; d < NDIM; ++d){
 			fscanf(fp, "%lf %lf\n", &dmin, &dmax);
 			box[d] = fabs(dmax-dmin);
@@ -232,7 +247,9 @@ void read_data(void){
 			if (NDIM == 2) r[n][2] = 0.0; // Ensure the 2d case is happy
 			fscanf(fp, "%lf\n", &diameter);
 		}
-	#endif
+	} else{
+		printf("Filetype not recognised :(\n");
+	}
 
 	fclose(fp);
 }
@@ -686,7 +703,9 @@ void run_simulation(){
 	#endif
 	fclose(settings_fd);
 
+	#ifndef NPT
     set_density();
+	#endif
 
     //for(d = 0; d < NDIM; ++d) assert(r_cut <= 0.5 * box[d]);
 	energy = get_total_energy();
@@ -875,7 +894,7 @@ int main(int argc, char* argv[]){
 	settings_fd = nice_fopen(buffer, "w");
 	fprintf(settings_fd, "SEED: %zu\n", seed);
 	
-	signal(SIGINT, *close_fds);
+	signal(SIGINT, *handle_sigint);
 
 	run_simulation();
 
