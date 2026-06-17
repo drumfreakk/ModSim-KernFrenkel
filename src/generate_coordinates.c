@@ -106,17 +106,17 @@ void dc(double l, int N, FILE* output){
 
 void hcp(double l, int N, FILE* output){
     fprintf(output, "%i\n", N*N*(N+1));
-    fprintf(output, "%lf\t%lf\n", 0.0, N * 1.5 * l+4.0*l);
-    fprintf(output, "%lf\t%lf\n", 0.0, N * 1.5 * l+5.0*l);
-    fprintf(output, "%lf\t%lf\n", 0.0, N * 1.5 * l+2.0*l);
+    fprintf(output, "%lf\t%lf\n", 0.0, (2.0*N +1.0) * l);
+    fprintf(output, "%lf\t%lf\n", 0.0, (sqrt(3.0)*(N+1)+(N%2)/sqrt(3.0))*l  );
+    fprintf(output, "%lf\t%lf\n", 0.0, (2.0*sqrt(2.0/3.0)*N) * l);
 
 	for (int i = 0; i < N; i++){
 		for (int j = 0; j < N+1; j++){
 			for (int k = 0; k < N; k++){
 				fprintf(output, "%lf\t%lf\t%lf\t%lf\n",
-				        2.0*i*l + ((j+k)%2) * l,
-						sqrt(3.0) * j * l + (k%2)/sqrt(3.0) * l,
-						2.0*sqrt(2.0/3.0) * k * l,
+				        2.0*i*l + ((j+k)%2) * l + 0.5*D,
+						sqrt(3.0) * j * l + (k%2)/sqrt(3.0) * l+0.5*D,
+						2.0*sqrt(2.0/3.0) * k * l+0.5*D,
 						D);
 			}
 		}
@@ -129,7 +129,7 @@ int main(){
     FILE* output;
 
 	output=fopen("../hcp/hcp.dat", "w");
-	hcp(0.5, 5, output);
+	hcp(0.63, 8, output);
 //	output = fopen("../dc/dc.dat", "w");
 //	dc(0.7, 7, output);
 //	output = fopen("../bcc/bcc.dat", "w");
