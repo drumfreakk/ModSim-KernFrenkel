@@ -83,5 +83,6 @@ MateoRandom/
 .DS_Store
 .vscode
 sbpp_scan.py
+ProgressBar.c
 
 *.txt
