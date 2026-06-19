@@ -19,21 +19,21 @@
 
 #define NPATCHES 3
 
-// #define NPT
+//#define NPT
 
 // #define INITROTATIONS
 int init_steps = 1e5;
 //#define ROTATIONONLY
 
 /* Initialization variables */
-const int    mc_steps      = 2e6;
+const int    mc_steps      = 4e5;
 const int    output_steps  = 100;
 double       density       = 0.7; // Either use this or pressure depending on whether we're NPT or NVT
-double       pressure      = 10.0;  
+double       pressure      = 4.0;  
 double       delta_r       = 0.1; // Initial step size
 double       delta_a       = 0.1; // Initial angle change size 
 double       delta_V       = 0.1; // Initial volume change size
-double       beta          = 10;
+double       beta          = 6.25;
 
 static char  init_filename[128] = "../hcp/252_rot.snap";
 
@@ -45,8 +45,8 @@ const double sigma = 1.0;
 const double epsilon = 1.0;
 
 // Kern Frenkel Patchy particle model parameters
-double patchdistance = 1.3; // Lambda, multiple of the diameter to which the path extends
-double coshalfangle = 0.99; // ~cos(pi/8) as a first try, some nice value for now
+double patchdistance = 1.12; // Lambda, multiple of the diameter to which the path extends
+double coshalfangle = 0.92; // ~cos(pi/8) as a first try, some nice value for now
 
 static char output_dir[128] = "out";
 
@@ -700,6 +700,8 @@ void run_simulation(){
 	       init_filename, n_particles, NPATCHES, 1.0/beta);
 	fprintf(settings_fd, "\tInit filename: %s\n\tNumber of particles: %i\n\tNPATCHES: %i\n\tTemperature: %lf\n",
 	        init_filename, n_particles, NPATCHES, 1.0/beta);
+	printf("\tLambda: %lf\n\tCos(halfangle): %lf\n", patchdistance, coshalfangle);
+	fprintf(settings_fd, "\tLambda: %lf\n\tCos(halfangle): %lf\n", patchdistance, coshalfangle);
 	#ifdef NPT
 	printf("\tPressure: %lf\n", pressure);
 	fprintf(settings_fd, "\tPressure: %lf\n", pressure);

@@ -98,11 +98,12 @@ temp_pressure: out
 
 
 
-STARTING_CRYSTALS = FCC BCC HCP DIAMOND
-TEMPERATURES ?= 0.08 0.16
-PRESSURES ?= 4 12
 # Run through: crystals, temperature, pressure
 # I added a possibility of adding simple cubic but we need to make those files to run it, its an interesting thing to look at tho
+#temp_pressure_measurement: STARTING_CRYSTALS = HCP DIAMOND #FCC BCC
+temp_pressure_measurement: STARTING_CRYSTALS = BCC
+temp_pressure_measurement: TEMPERATURES ?= 0.05 0.4
+temp_pressure_measurement: PRESSURES ?= 10 0.1 0.001
 temp_pressure_measurement: CFLAGS += -DNPT
 temp_pressure_measurement: out
 	@for crystal in $(STARTING_CRYSTALS); do \
@@ -112,6 +113,7 @@ temp_pressure_measurement: out
             HCP) initfile="../hcp/252_rot.snap" ;; \
             SC) initfile="../sc/500_rot.snap" ;; \
             DIAMOND) initfile="../dc/512_rot.snap" ;; \
+			FLUID) initfile="../fluid/500.snap" ;;\
             *) echo "Configuration for $$crystal not found!"; exit 1 ;; \
         esac; \
         echo "Starting simulation for $$crystal (INIT: $$initfile)"; \
@@ -126,11 +128,11 @@ temp_pressure_measurement: out
 
 
 
-STARTING_CRYSTALS = FCC BCC HCP DIAMOND
-COS_LIST ?= 0.97 0.98 0.99
-LAMBDA_LIST ?= 1.02 1.12
 
 # Run through: crystals, lambda interaction lenght, coshlafangle
+lambda_coshalfangle_measurement: STARTING_CRYSTALS = FCC BCC
+lambda_coshalfangle_measurement: COS_LIST ?= 0.97 0.98 0.99
+lambda_coshalfangle_measurement: LAMBDA_LIST ?= 1.02 1.12
 lambda_coshalfangle_measurement: CFLAGS += -DNPT
 lambda_coshalfangle_measurement: out
 	@for crystal in $(STARTING_CRYSTALS); do \
@@ -140,6 +142,7 @@ lambda_coshalfangle_measurement: out
             HCP) initfile="../hcp/252_rot.snap" ;; \
             SC) initfile="../sc/500_rot.snap" ;; \
             DIAMOND) initfile="../dc/512_rot.snap" ;; \
+			FLUID) initfile="../fluid/500.snap" ;;\
             *) echo "Configuration for $$crystal not found!"; exit 1 ;; \
         esac; \
 		echo "Starting simulation for $$crystal (INIT: $$initfile)"; \
@@ -154,10 +157,10 @@ lambda_coshalfangle_measurement: out
     done
 
 
-STARTING_CRYSTALS = FCC BCC HCP DIAMOND
-TEMPERATURES ?= 0.12
-DENSITIES ?= 0.75
 # Run through: crystals, temperature, density
+temp_density_measurement: STARTING_CRYSTALS = FCC BCC HCP DIAMOND
+temp_density_measurement: TEMPERATURES ?= 0.12
+temp_density_measurement: DENSITIES ?= 0.75
 temp_density_measurement: out
 	@for crystal in $(STARTING_CRYSTALS); do \
         case "$$crystal" in \
@@ -166,6 +169,7 @@ temp_density_measurement: out
             HCP) initfile="../hcp/252_rot.snap" ;; \
             SC) initfile="../sc/500_rot.snap" ;; \
             DIAMOND) initfile="../dc/512_rot.snap" ;; \
+			FLUID) initfile="../fluid/500.snap" ;;\
             *) echo "Configuration for $$crystal not found!"; exit 1 ;; \
         esac; \
         echo "Starting simulation for $$crystal (INIT: $$initfile)"; \
