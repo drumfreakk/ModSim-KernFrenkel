@@ -125,11 +125,42 @@ void hcp(double l, int N, FILE* output){
 
 }
 
+void fhp(double l, int N, FILE* output){
+    fprintf(output, "%i\n", 4*N*N*N);
+    fprintf(output, "%lf\t%lf\n", 0.0, l*6*N/sqrt(34.0/9));
+    fprintf(output, "%lf\t%lf\n", 0.0, l*N*20.0/(6.0*sqrt(34.0/9)) );
+    fprintf(output, "%lf\t%lf\n", 0.0, N*l);
+
+	for (int i = 0; i < N; i++){
+		for (int j = 0; j < N; j++){
+			for (int k = 0; k < N; k++){
+				fprintf(output, "%lf\t%lf\t%lf\t%lf\n", l*(6*i+1)/sqrt(34.0/9),   (l*5.0/6.0)*(4*j)  /sqrt(34.0/9),     l*k, D);
+				fprintf(output, "%lf\t%lf\t%lf\t%lf\n", l*(6*i+3)/sqrt(34.0/9),   (l*5.0/6.0)*(4*j)  /sqrt(34.0/9),     l*k, D);
+				fprintf(output, "%lf\t%lf\t%lf\t%lf\n", l*(6*i+0)/sqrt(34.0/9),   (l*5.0/6.0)*(4*j+2)/sqrt(34.0/9),     l*k, D);
+				fprintf(output, "%lf\t%lf\t%lf\t%lf\n", l*(6*i+4)/sqrt(34.0/9),   (l*5.0/6.0)*(4*j+2)/sqrt(34.0/9),     l*k, D);
+			//	if ( (((i+1+2*(j%2))/2)%2)!=0 ){
+			//		fprintf(output, "%lf\t%lf\t%lf\t%lf\n", l*i, l*j, l*k, D);
+			//	}
+		//		fprintf(output, "%lf\t%lf\t%lf\t%lf\n",
+		//		        2.0*i*l + ((j+k)%2) * l + 0.5*D,
+		//				sqrt(3.0) * j * l + (k%2)/sqrt(3.0) * l+0.5*D,
+		//				2.0*sqrt(2.0/3.0) * k * l+0.5*D,
+		//				D);
+			}
+		}
+	}
+
+
+}
+
 int main(){
     FILE* output;
 
-	output=fopen("../hcp/hcp.dat", "w");
-	hcp(0.6, 3, output);
+	output=fopen("../fhp/fhp.dat", "w");
+	fhp(1.0, 3, output);
+
+//	output=fopen("../hcp/hcp.dat", "w");
+//	hcp(0.6, 3, output);
 //	output = fopen("../dc/dc.dat", "w");
 //	dc(0.7, 7, output);
 //	output = fopen("../bcc/bcc.dat", "w");

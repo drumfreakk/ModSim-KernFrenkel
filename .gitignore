@@ -76,6 +76,8 @@ dkms.conf
 !bcc/*
 !dc/*
 !hcp/*
+!fhp/*
+!fluid/*
 !final_output/*
 
 # my random folder and other added files

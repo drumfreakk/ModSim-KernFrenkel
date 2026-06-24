@@ -29,13 +29,13 @@ int init_steps = 1e5;
 const int    mc_steps      = 4e5;
 const int    output_steps  = 100;
 double       density       = 0.7; // Either use this or pressure depending on whether we're NPT or NVT
-double       pressure      = 4.0;  
+double       pressure      = 0.001;  
 double       delta_r       = 0.1; // Initial step size
 double       delta_a       = 0.1; // Initial angle change size 
 double       delta_V       = 0.1; // Initial volume change size
-double       beta          = 6.25;
+double       beta          = 20;
 
-static char  init_filename[128] = "../hcp/252_rot.snap";
+static char  init_filename[128] = "../fhp/108_rot.snap";
 
 bool from_snapshot = false;
 

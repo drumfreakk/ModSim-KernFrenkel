@@ -101,7 +101,7 @@ temp_pressure: out
 # Run through: crystals, temperature, pressure
 # I added a possibility of adding simple cubic but we need to make those files to run it, its an interesting thing to look at tho
 #temp_pressure_measurement: STARTING_CRYSTALS = HCP DIAMOND #FCC BCC
-temp_pressure_measurement: STARTING_CRYSTALS = BCC
+temp_pressure_measurement: STARTING_CRYSTALS = FHP # FCC HCP
 temp_pressure_measurement: TEMPERATURES ?= 0.05 0.4
 temp_pressure_measurement: PRESSURES ?= 10 0.1 0.001
 temp_pressure_measurement: CFLAGS += -DNPT
@@ -113,13 +113,14 @@ temp_pressure_measurement: out
             HCP) initfile="../hcp/252_rot.snap" ;; \
             SC) initfile="../sc/500_rot.snap" ;; \
             DIAMOND) initfile="../dc/512_rot.snap" ;; \
-			FLUID) initfile="../fluid/500.snap" ;;\
+            FLUID) initfile="../fluid/500.snap" ;;\
+            FHP) initfile="../fhp/108_rot.snap" ;;\
             *) echo "Configuration for $$crystal not found!"; exit 1 ;; \
         esac; \
         echo "Starting simulation for $$crystal (INIT: $$initfile)"; \
         for temp in $(TEMPERATURES); do \
             for p in $(PRESSURES); do \
-                out_dir=$(OUT_BASE)/$$crystal/T_$${temp}_P_$${p}; \
+                out_dir=$(OUT_BASE)/$$crystal/T_$${temp}_P_$${p}_1; \
                 mkdir -p $$out_dir; \
                 ./build/out --initfile $$initfile --temperature $$temp --pressure $$p --outdir $$out_dir; \
             done; \
@@ -130,7 +131,7 @@ temp_pressure_measurement: out
 
 
 # Run through: crystals, lambda interaction lenght, coshlafangle
-lambda_coshalfangle_measurement: STARTING_CRYSTALS = FCC BCC
+lambda_coshalfangle_measurement: STARTING_CRYSTALS = FHP # FCC HCP
 lambda_coshalfangle_measurement: COS_LIST ?= 0.97 0.98 0.99
 lambda_coshalfangle_measurement: LAMBDA_LIST ?= 1.02 1.12
 lambda_coshalfangle_measurement: CFLAGS += -DNPT
@@ -143,6 +144,7 @@ lambda_coshalfangle_measurement: out
             SC) initfile="../sc/500_rot.snap" ;; \
             DIAMOND) initfile="../dc/512_rot.snap" ;; \
 			FLUID) initfile="../fluid/500.snap" ;;\
+            FHP) initfile="../fhp/108_rot.snap" ;;\
             *) echo "Configuration for $$crystal not found!"; exit 1 ;; \
         esac; \
 		echo "Starting simulation for $$crystal (INIT: $$initfile)"; \
@@ -158,9 +160,9 @@ lambda_coshalfangle_measurement: out
 
 
 # Run through: crystals, temperature, density
-temp_density_measurement: STARTING_CRYSTALS = FCC BCC HCP DIAMOND
-temp_density_measurement: TEMPERATURES ?= 0.12
-temp_density_measurement: DENSITIES ?= 0.75
+temp_density_measurement: STARTING_CRYSTALS = FHP
+temp_density_measurement: TEMPERATURES ?= 0.1 0.35
+temp_density_measurement: DENSITIES ?= 0.7 0.9 1.4 
 temp_density_measurement: out
 	@for crystal in $(STARTING_CRYSTALS); do \
         case "$$crystal" in \
@@ -170,12 +172,14 @@ temp_density_measurement: out
             SC) initfile="../sc/500_rot.snap" ;; \
             DIAMOND) initfile="../dc/512_rot.snap" ;; \
 			FLUID) initfile="../fluid/500.snap" ;;\
+            FHP) initfile="../fhp/108_rot.snap" ;;\
             *) echo "Configuration for $$crystal not found!"; exit 1 ;; \
         esac; \
         echo "Starting simulation for $$crystal (INIT: $$initfile)"; \
         for temp in $(TEMPERATURES); do \
 			for rho in $(DENSITIES); do \
-				out_dir=$(OUT_BASE)/$$crystal/T_$${temp}_rho_$${rho}; \
+        		echo "Starting simulation for $$temp and $$rho"; \
+				out_dir=$(OUT_BASE)/$$crystal/T_$${temp}_rho_$${rho}_1; \
 				mkdir -p $$out_dir; \
 				./build/out --initfile $$initfile --temperature $$temp --density $$rho --outdir $$out_dir; \
 			done; \
